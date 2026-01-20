@@ -42,7 +42,7 @@ uv run -m demo.cli --help
 
 Note: Run commands from the repository root.
 
-### Stage 1 + 2 usage
+### Stage 1–3 usage
 
 Show CLI help:
 
@@ -56,12 +56,16 @@ Create a run (loads dataset, normalizes messages, runs LLM extraction, writes ou
 uv run demo run --input data/01_raw_messages.json
 ```
 
-This creates:
+This creates (per run):
 
 - `runs/<run_id>/messages.normalized.jsonl`
 - `runs/<run_id>/events.pass1.jsonl`
 - `runs/<run_id>/events.pass1.errors.jsonl`
-- `runs/<run_id>/run_meta.json` (with `stage: 2`, counts, and stats)
+- `runs/<run_id>/instances.json`
+- `runs/<run_id>/timeline.json`
+- `runs/<run_id>/review_template.json`
+- `runs/<run_id>/eval_report.json`
+- `runs/<run_id>/run_meta.json` (with `stage: 3`, counts, and stats)
 
 Run the eval stub:
 
@@ -73,6 +77,12 @@ Rerun Stage 2 only (helpful when iterating on prompts/types) for an existing run
 
 ```bash
 uv run demo pass1 --run-id <run_id>
+```
+
+Rerun Stage 3 only (clustering + state inference):
+
+```bash
+uv run demo stage3 --run-id <run_id>
 ```
 
 ### Config
@@ -115,6 +125,34 @@ run:
 eval:
   review_filename: review.json
   report_filename: eval_report.json
+stage3:
+  enabled: true
+  input:
+    events_pass1: events.pass1.jsonl
+    normalized_messages: messages.normalized.jsonl
+  output:
+    instances: instances.json
+    timeline: timeline.json
+    review_template: review_template.json
+    eval_report: eval_report.json
+  clustering:
+    method: thread_first
+    min_event_confidence: 0.30
+    allow_split_by_process: true
+    max_threads_to_process: null
+  pass2:
+    model: ${OPENAI_MODEL}
+    temperature: 0
+    max_output_tokens: 900
+    timeout_s: 90
+    max_retries: 3
+  evidence:
+    max_items_per_instance: 7
+    min_confidence: 0.30
+  eval:
+    review_filename: review.json
+    labels:
+      allowed: ["correct", "partial", "incorrect", "unsure"]
 ```
 
 ### Environment variables
@@ -156,6 +194,14 @@ Confirm:
 - `runs/<run_id>/events.pass1.errors.jsonl` exists (may be empty)
 - `runs/<run_id>/run_meta.json` has `stage: 2`, `counts.pass1_success`, `counts.pass1_errors`, and `stats.pass1_by_event_type`
 
-### Roadmap
+### Definition of Done (Stage 3)
 
-- Stage 3.5 will implement review/eval
+After Stage 2:
+```bash
+uv run demo run --input data/01_raw_messages.json
+# or rerun only Stage 3 for an existing run:
+uv run demo stage3 --run-id <run_id>
+```
+Confirm:
+- `runs/<run_id>/instances.json`, `timeline.json`, `review_template.json`, `eval_report.json` exist
+- `runs/<run_id>/run_meta.json` has `stage: 3`, `counts.instances`, `stats.instances_by_status`, and `stats.mean_instance_confidence`

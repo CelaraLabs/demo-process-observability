@@ -13,6 +13,7 @@ from .config import ConfigError, load_config
 from .io.load_raw import load_raw_dataset, extract_messages
 from .io.normalize import normalize_messages
 from .pipeline.pass1 import run_pass1
+from .pipeline.pass2 import run_stage3
 from .schemas.messages import NormalizedMessage
 from .utils.json_utils import write_json, write_jsonl, read_jsonl
 from .utils.paths import ensure_dir, get_run_dir
@@ -164,6 +165,46 @@ def cmd_run(args: argparse.Namespace) -> int:
                 # Keep meta at stage 1 if Stage 2 fails
                 return 1
 
+        # Stage 3: cluster + pass2 (optional)
+        stage3_cfg = cfg.get("stage3", {})
+        if stage3_cfg.get("enabled", True):
+            try:
+                console.print("[bold]Starting Stage 3...[/bold]")
+                result3 = run_stage3(run_dir, cfg)
+                # Update meta to stage 3
+                run_meta.update(
+                    {
+                        "stage": 3,
+                        "counts": {
+                            **run_meta.get("counts", {}),
+                            "instances": len(result3.instances),
+                            "events_used": sum(len(v) for v in result3.by_instance_timeline.values()),
+                            "threads": len({k for k in result3.by_instance_timeline.keys()}),
+                        },
+                        "stats": {
+                            **run_meta.get("stats", {}),
+                            "instances_by_status": result3.stats.get("instances_by_status"),
+                            "mean_instance_confidence": result3.stats.get("mean_instance_confidence"),
+                        },
+                        "output_files": {
+                            **run_meta.get("output_files", {}),
+                            "instances": stage3_cfg.get("output", {}).get("instances", "instances.json"),
+                            "timeline": stage3_cfg.get("output", {}).get("timeline", "timeline.json"),
+                            "review_template": stage3_cfg.get("output", {}).get("review_template", "review_template.json"),
+                            "eval_report": stage3_cfg.get("output", {}).get("eval_report", "eval_report.json"),
+                        },
+                        "notes": "Stage 3: clustering + state inference completed.",
+                    }
+                )
+                write_json(meta_path, run_meta)
+                console.print(
+                    f"[bold]Stage 3:[/bold] instances={len(result3.instances)} "
+                    f"mean_conf={result3.stats.get('mean_instance_confidence')}"
+                )
+            except Exception as e:
+                console.print(f"[red]Stage 3 failed:[/red] {e}")
+                return 1
+
         return 0
     except SystemExit:
         raise
@@ -285,6 +326,63 @@ def build_parser() -> argparse.ArgumentParser:
     p_pass1.add_argument("--config", type=str, default="config.yml", help="Path to config.yml")
     p_pass1.add_argument("--run-id", type=str, required=True, help="Run ID to process")
     p_pass1.set_defaults(func=cmd_pass1)
+
+    # stage3 (rerun Stage 3 only)
+    def cmd_stage3(args: argparse.Namespace) -> int:
+        config_path = Path(args.config or "config.yml")
+        cfg = _load_config_or_exit(config_path)
+        runs_dir = Path(cfg["io"]["runs_dir"])
+        run_dir = get_run_dir(runs_dir, args.run_id)
+        try:
+            result3 = run_stage3(run_dir, cfg)
+            meta_path = run_dir / "run_meta.json"
+            try:
+                from json import load
+                with meta_path.open("r", encoding="utf-8") as f:
+                    run_meta = load(f)
+            except Exception:
+                run_meta = {}
+            stage3_cfg = cfg.get("stage3", {})
+            run_meta.update(
+                {
+                    "stage": 3,
+                    "counts": {
+                        **run_meta.get("counts", {}),
+                        "instances": len(result3.instances),
+                        "events_used": sum(len(v) for v in result3.by_instance_timeline.values()),
+                        "threads": len({k for k in result3.by_instance_timeline.keys()}),
+                    },
+                    "stats": {
+                        **run_meta.get("stats", {}),
+                        "instances_by_status": result3.stats.get("instances_by_status"),
+                        "mean_instance_confidence": result3.stats.get("mean_instance_confidence"),
+                    },
+                    "output_files": {
+                        **run_meta.get("output_files", {}),
+                        "instances": stage3_cfg.get("output", {}).get("instances", "instances.json"),
+                        "timeline": stage3_cfg.get("output", {}).get("timeline", "timeline.json"),
+                        "review_template": stage3_cfg.get("output", {}).get("review_template", "review_template.json"),
+                        "eval_report": stage3_cfg.get("output", {}).get("eval_report", "eval_report.json"),
+                    },
+                    "notes": "Stage 3: clustering + state inference completed.",
+                }
+            )
+            write_json(meta_path, run_meta)
+            console.print(
+                f"[bold]Stage 3:[/bold] instances={len(result3.instances)} "
+                f"mean_conf={result3.stats.get('mean_instance_confidence')}"
+            )
+            return 0
+        except SystemExit:
+            raise
+        except Exception as e:
+            console.print(f"[red]Stage 3 failed:[/red] {e}")
+            return 1
+
+    p_stage3 = sub.add_parser("stage3", help="Run Stage 3 clustering + state inference")
+    p_stage3.add_argument("--config", type=str, default="config.yml", help="Path to config.yml")
+    p_stage3.add_argument("--run-id", type=str, required=True, help="Run ID to process")
+    p_stage3.set_defaults(func=cmd_stage3)
 
     return parser
 

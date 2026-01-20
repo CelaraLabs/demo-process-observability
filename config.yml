@@ -40,3 +40,32 @@ eval:
   # Stage 0: stub only. Stage 3.5 will implement.
   review_filename: review.json
   report_filename: eval_report.json
+
+stage3:
+  enabled: true
+  input:
+    events_pass1: events.pass1.jsonl
+    normalized_messages: messages.normalized.jsonl
+  output:
+    instances: instances.json
+    timeline: timeline.json
+    review_template: review_template.json
+    eval_report: eval_report.json
+  clustering:
+    method: thread_first
+    min_event_confidence: 0.30
+    allow_split_by_process: true
+    max_threads_to_process: null
+  pass2:
+    model: ${OPENAI_MODEL}
+    temperature: 0
+    max_output_tokens: 900
+    timeout_s: 90
+    max_retries: 3
+  evidence:
+    max_items_per_instance: 7
+    min_confidence: 0.30
+  eval:
+    review_filename: review.json
+    labels:
+      allowed: ["correct", "partial", "incorrect", "unsure"]

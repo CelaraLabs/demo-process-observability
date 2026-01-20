@@ -190,6 +190,9 @@ def run_pass1(messages: List[NormalizedMessage], config: Dict, run_dir: Path) ->
             return msg.message_id, None, err
 
         evt_dict = evt.model_dump()
+        # Ensure thread_id present by propagating from normalized message if omitted
+        if not evt_dict.get("thread_id") and msg.thread_id:
+            evt_dict["thread_id"] = msg.thread_id
         if cache_enabled:
             _write_cache(cache_path, raw_output=raw_output if isinstance(raw_output, str) else json.dumps(raw_output), parsed_event=evt_dict)
         return msg.message_id, evt_dict, None

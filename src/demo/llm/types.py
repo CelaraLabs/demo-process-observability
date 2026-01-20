@@ -38,6 +38,7 @@ class Pass1Event(BaseModel):
     evidence: EvidenceRef
 
     # Optional
+    thread_id: Optional[str] = None
     candidate_client: Optional[str] = None
     candidate_process: Optional[str] = None
     candidate_role: Optional[str] = None
