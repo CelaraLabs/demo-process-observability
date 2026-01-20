@@ -1,0 +1,14 @@
+project:
+  name: demo-process-observability
+
+io:
+  runs_dir: runs
+  input_path: data/01_raw_messages.json
+
+run:
+  write_run_meta: true
+
+eval:
+  # Stage 0: stub only. Stage 3.5 will implement.
+  review_filename: review.json
+  report_filename: eval_report.json

@@ -1,0 +1,15 @@
+# Project runs and local env
+runs/
+.env
+!.env.example
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+stage*.md
