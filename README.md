@@ -4,8 +4,8 @@ A minimal demo repository that establishes a stable run contract and CLI scaffol
 
 ### What this provides
 
-- `python -m demo.cli run` creates `runs/<run_id>/` and writes `run_meta.json`
-- `python -m demo.cli eval` exists as a stub and prints helpful output
+- `python3 -m demo.cli run` creates `runs/<run_id>/` and writes `run_meta.json`
+- `python3 -m demo.cli eval` exists as a stub and prints helpful output
 - Config and env conventions are in place
 
 ### Requirements
@@ -19,7 +19,7 @@ You can use either `uv` or `pip`.
 Using pip:
 
 ```bash
-python -m pip install -e .
+python3 -m pip install -e .
 ```
 
 Using uv:
@@ -33,13 +33,13 @@ uv sync
 Show CLI help:
 
 ```bash
-python -m demo.cli --help
+python3 -m demo.cli --help
 ```
 
 Create a run (will create a new run id and write a meta file):
 
 ```bash
-python -m demo.cli run --input data/01_raw_messages.json
+python3 -m demo.cli run --input data/01_raw_messages.json
 ```
 
 This creates:
@@ -49,7 +49,7 @@ This creates:
 Run the eval stub:
 
 ```bash
-python -m demo.cli eval --run-id <run_id>
+python3 -m demo.cli eval --run-id <run_id>
 ```
 
 ### Config
