@@ -14,32 +14,46 @@ A minimal demo repository that establishes a stable run contract and CLI scaffol
 
 ### Setup
 
-You can use either `uv` or `pip`.
+You can use `uv`.
 
-Using pip:
+Install `uv` if needed:
 
 ```bash
-python3 -m pip install -e .
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# ensure ~/.local/bin is on PATH for the current shell session
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Using uv:
+Install dependencies and the project (editable):
 
 ```bash
 uv sync
 ```
+
+Quickstart sanity check:
+
+```bash
+# Run console script via uv
+uv run demo --help
+
+# Or module form
+uv run -m demo.cli --help
+```
+
+Note: Run commands from the repository root.
 
 ### Stage 0 usage
 
 Show CLI help:
 
 ```bash
-python3 -m demo.cli --help
+uv run demo --help
 ```
 
 Create a run (will create a new run id and write a meta file):
 
 ```bash
-python3 -m demo.cli run --input data/01_raw_messages.json
+uv run demo run --input data/01_raw_messages.json
 ```
 
 This creates:
@@ -49,7 +63,7 @@ This creates:
 Run the eval stub:
 
 ```bash
-python3 -m demo.cli eval --run-id <run_id>
+uv run demo eval --run-id <run_id>
 ```
 
 ### Config
