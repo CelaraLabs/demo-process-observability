@@ -30,6 +30,47 @@ def _event_filter(ev: Dict[str, Any], min_conf: float) -> bool:
     return conf >= min_conf
 
 
+def canonicalize_process(process: Optional[str]) -> Optional[str]:
+    """
+    Normalize candidate_process values to reduce synonym drift.
+    Rules:
+      - None/empty -> None
+      - lowercase, strip, collapse spaces
+      - map common synonyms to canonical labels
+      - else return cleaned original in Title Case
+    """
+    if not process or not isinstance(process, str):
+        return None
+    cleaned = " ".join(process.strip().lower().split())
+    if not cleaned:
+        return None
+    # Synonym maps
+    if cleaned in {"recruiting", "hiring"}:
+        return "hiring"
+    if "recruiting pipeline" in cleaned or "ai search" in cleaned or "ai searching" in cleaned:
+        return "hiring"
+    if cleaned in {"software delivery", "delivery"}:
+        return "delivery"
+    if cleaned in {"operations", "ops"}:
+        return "ops"
+    # Keep cleaned original but normalize casing to title
+    return cleaned.title()
+
+
+def _event_timestamp_str(ev: Dict[str, Any]) -> Optional[str]:
+    """
+    Choose timestamp from Pass1Event with priority:
+      1) evidence.timestamp
+      2) event.timestamp (top-level string if present)
+      3) None
+    """
+    evd = ev.get("evidence") or {}
+    ts = evd.get("timestamp")
+    if ts:
+        return ts
+    return ev.get("timestamp")
+
+
 def _group_by_thread(events: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for ev in events:
@@ -41,17 +82,23 @@ def _group_by_thread(events: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, A
 
 def _maybe_split_by_process(events: List[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, Any]]]]:
     # Compute distinct candidate_process values
-    non_null = [e.get("candidate_process") for e in events if e.get("candidate_process")]
+    # Canonicalize for counting/splitting
+    canon_vals: List[Optional[str]] = []
+    for e in events:
+        e["_canon_proc"] = canonicalize_process(e.get("candidate_process"))
+        if e["_canon_proc"]:
+            canon_vals.append(e["_canon_proc"])
+    non_null = canon_vals
     counts = Counter(non_null)
     if len([p for p, c in counts.items() if c >= 2]) >= 2:
         # Split
         result: List[Tuple[str, List[Dict[str, Any]]]] = []
         for proc, _ in counts.items():
-            cluster_events = [e for e in events if e.get("candidate_process") == proc]
+            cluster_events = [e for e in events if e.get("_canon_proc") == proc]
             if cluster_events:
                 result.append((f"proc:{_slug(proc)}", cluster_events))
         # Also include unassigned (null) if any
-        unassigned = [e for e in events if not e.get("candidate_process")]
+        unassigned = [e for e in events if not e.get("_canon_proc")]
         if unassigned:
             result.append(("proc:unknown", unassigned))
         return result
@@ -67,18 +114,18 @@ def _build_prompt_input(instance_key: str, thread_id: Optional[str], events: Lis
     # Sort by timestamp (string ISO asc)
     sorted_events = sorted(
         events,
-        key=lambda e: (e.get("timestamp") or "", e.get("message_id") or ""),
+        key=lambda e: (_event_timestamp_str(e) or "", e.get("message_id") or ""),
     )
     compact = []
     for e in sorted_events:
         compact.append(
             {
                 "message_id": e.get("message_id"),
-                "timestamp": e.get("timestamp"),
+                "timestamp": _event_timestamp_str(e),
                 "event_type": e.get("event_type"),
                 "confidence": e.get("confidence"),
                 "candidate_client": e.get("candidate_client"),
-                "candidate_process": e.get("candidate_process"),
+                "candidate_process": canonicalize_process(e.get("candidate_process")),
                 "candidate_role": e.get("candidate_role"),
                 "snippet": ((e.get("evidence") or {}).get("snippet")),
             }
@@ -233,23 +280,27 @@ def run_stage3(run_dir: Path, cfg: Dict[str, Any]) -> Stage3Result:
         if not selected_ids and ev_list:
             selected_ids = [ev_list[-1]["message_id"]]
 
+        # Canonicalize candidate_process for output
+        out_candidate_process = canonicalize_process(
+            data.get("candidate_process") or _most_frequent_non_null(ev_list, "candidate_process")
+        )
         instance = {
             "instance_key": instance_key,
             "thread_ids": [thread_id] if thread_id else None,
             "candidate_client": data.get("candidate_client") or _most_frequent_non_null(ev_list, "candidate_client"),
-            "candidate_process": data.get("candidate_process") or _most_frequent_non_null(ev_list, "candidate_process"),
+            "candidate_process": out_candidate_process,
             "candidate_role": data.get("candidate_role") or _most_frequent_non_null(ev_list, "candidate_role"),
             "state": {
                 "status": data.get("status", "unknown"),
                 "step": data.get("step"),
                 "summary": data.get("summary"),
-                "last_updated_at": data.get("last_updated_at"),
+                "last_updated_at": None,  # will compute below from evidence timestamps
                 "confidence": data.get("confidence", 0.0),
             },
             "evidence": [
                 {
                     "message_id": mid,
-                    "timestamp": ev_by_id[mid].get("timestamp"),
+                    "timestamp": _event_timestamp_str(ev_by_id[mid]),
                     "event_type": ev_by_id[mid].get("event_type"),
                     "confidence": ev_by_id[mid].get("confidence"),
                     "snippet": ((ev_by_id[mid].get("evidence") or {}).get("snippet")),
@@ -257,6 +308,10 @@ def run_stage3(run_dir: Path, cfg: Dict[str, Any]) -> Stage3Result:
                 for mid in selected_ids
             ],
         }
+        # Compute last_updated_at as max evidence timestamp
+        ev_timestamps = [evi.get("timestamp") for evi in instance["evidence"] if evi.get("timestamp")]
+        if ev_timestamps:
+            instance["state"]["last_updated_at"] = max(ev_timestamps)
         instances.append(instance)
 
         # Timeline for this instance: all events, chronological
@@ -264,7 +319,7 @@ def run_stage3(run_dir: Path, cfg: Dict[str, Any]) -> Stage3Result:
             [
                 {
                     "message_id": e.get("message_id"),
-                    "timestamp": e.get("timestamp"),
+                    "timestamp": _event_timestamp_str(e),
                     "event_type": e.get("event_type"),
                     "confidence": e.get("confidence"),
                     "snippet": ((e.get("evidence") or {}).get("snippet")),
