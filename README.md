@@ -1,12 +1,17 @@
-## Demo: Process Observability — Stage 0
+## Demo: Process Observability
 
-A minimal demo repository that establishes a stable run contract and CLI scaffold. Stage 0 includes no data parsing and no LLM calls.
+An end-to-end demo that establishes a stable run contract and CLI, runs the full pipeline with LLMs, and ships a Streamlit dashboard:
+- Stage 1: normalize messages
+- Stage 2: pass1 LLM event extraction
+- Stage 3: clustering + state inference
+- Stage 4: dashboard for browsing, review, and evaluation
 
 ### What this provides
 
 - `uv run demo run` loads the dataset, normalizes messages (Stage 1), runs pass1 LLM extraction (Stage 2), writes outputs, and updates `run_meta.json`
-- `uv run demo eval` exists as a stub and prints helpful output
+- `uv run demo eval` is a stub (placeholder) and prints helpful output
 - Config and env conventions are in place
+- `uv run streamlit run src/demo/dashboard/app.py -- --runs-dir runs --run-id latest` launches the dashboard (Stage 4)
 
 ### Requirements
 
@@ -42,7 +47,7 @@ uv run -m demo.cli --help
 
 Note: Run commands from the repository root.
 
-### Stage 1–3 usage
+### Pipeline usage (Stages 1–3)
 
 Show CLI help:
 
