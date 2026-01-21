@@ -11,8 +11,8 @@ credentials:
 gmail:
   enabled: true
   owner_mailboxes:
-    - hr_owner@company.com
-    - pm_owner@company.com
+    - mbehotas@celaralabs.com
+    - ctommasi@celaralabs.com
   query:
     extra: ""         # optional extra Gmail search terms
   max_per_mailbox: null
