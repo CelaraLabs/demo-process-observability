@@ -26,14 +26,26 @@ def _read_credentials(path: Path) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to read credentials at {path}: {e}") from e
 
 
-def run_ingestion(config_path: Path, out_dir: Path) -> Path:
+def _derive_unique_out_dir(base_out: Path, dataset_id: str, start_date: str, end_date: str) -> Path:
+    name = f"{dataset_id}_{start_date}_{end_date}"
+    target = base_out / name
+    if not target.exists():
+        return target
+    # Increment suffix until available
+    i = 1
+    while True:
+        cand = base_out / f"{name}_{i}"
+        if not cand.exists():
+            return cand
+        i += 1
+
+
+def run_ingestion(config_path: Path, out_dir: Path, auto_subdir: bool = False) -> Path:
     """
     Execute ingestion per the Stage Ingestion spec.
     Returns path to data/raw_messages.jsonl (written).
     """
     cfg = load_config(config_path)
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     creds = _read_credentials(cfg.credentials_file)
 
     start_dt, end_dt, start_date, end_date = compute_window(cfg)
@@ -41,6 +53,11 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
         f"[bold]Ingestion window:[/bold] {start_date} → {end_date}  "
         f"(dataset_id={cfg.dataset_id})"
     )
+    out_dir = Path(out_dir)
+    if auto_subdir:
+        out_dir = _derive_unique_out_dir(out_dir, cfg.dataset_id, start_date, end_date)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    console.print(f"[bold]Output directory:[/bold] {out_dir}")
 
     dataset_id = cfg.dataset_id
     raw_items: List[RawMessage] = []
@@ -88,6 +105,11 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                 read_counts["gmail"] += len(msg_ids)
                 # Fetch each message detail
                 fetched = 0
+                total_to_fetch = len(msg_ids)
+                if total_to_fetch > 0:
+                    console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetching {total_to_fetch} messages ...")
+                # Log every ~5% or at least every 50, whichever is smaller threshold in count terms
+                log_every = max(1, min(50, max(1, total_to_fetch // 20)))
                 for mid in msg_ids:
                     try:
                         msg = service.users().messages().get(userId="me", id=mid, format="full").execute()
@@ -97,11 +119,12 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                             for tag in rm.ingestion.rules_matched:
                                 rules_counter[tag] += 1
                         fetched += 1
-                        if fetched % 200 == 0:
-                            console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetched {fetched}/{len(msg_ids)}")
+                        if fetched % log_every == 0 or fetched == total_to_fetch:
+                            pct = int((fetched / max(1, total_to_fetch)) * 100)
+                            console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetched {fetched}/{total_to_fetch} ({pct}%)")
                     except Exception:
                         continue
-                console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetched {fetched}/{len(msg_ids)} (done)")
+                console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetched {fetched}/{total_to_fetch} (done)")
             except Exception as e:
                 console.print(f"[yellow]Gmail listing failed for {mailbox}:[/yellow] {e}")
 

@@ -52,7 +52,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "ingest_config", None):
         ingest_out_dir = Path(args.ingest_out or "data")
         console.print(f"[bold]Starting ingestion...[/bold] config={args.ingest_config} out_dir={ingest_out_dir}")
-        raw_path = run_ingestion(Path(args.ingest_config), ingest_out_dir)
+        raw_path = run_ingestion(Path(args.ingest_config), ingest_out_dir, auto_subdir=bool(getattr(args, "ingest_auto_subdir", False)))
         input_path = raw_path
     else:
         input_path = Path(args.input) if args.input else Path(cfg["io"]["input_path"])
@@ -260,14 +260,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--ingest-config", type=str, help="Path to ingestion config (to run Stage 0 ingestion first)")
     p_run.add_argument("--ingest-out", type=str, help="Output directory for ingestion (default: data/)")
     p_run.add_argument("--run-id", type=str, help="Provide a specific run id")
+    p_run.add_argument("--ingest-auto-subdir", action="store_true", help="When using --ingest-config, create subfolder data/<dataset_id>_<start>_<end>")
     p_run.set_defaults(func=cmd_run)
 
     # ingest
     def cmd_ingest(args: argparse.Namespace) -> int:
         try:
             out_dir = Path(args.out or "data")
-            run_ingestion(Path(args.config), out_dir)
-            console.print(f"[bold green]Ingestion outputs written to:[/bold green] {out_dir}")
+            raw_path = run_ingestion(Path(args.config), out_dir, auto_subdir=bool(args.auto_subdir))
+            console.print(f"[bold green]Ingestion outputs written to:[/bold green] {raw_path.parent}")
             return 0
         except SystemExit:
             raise
@@ -278,6 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_ingest = sub.add_parser("ingest", help="Run Stage 0 ingestion (Gmail + Slack) to produce raw_messages.jsonl")
     p_ingest.add_argument("--config", type=str, required=True, help="Path to ingestion.yml")
     p_ingest.add_argument("--out", type=str, default="data", help="Output directory (default: data/)")
+    p_ingest.add_argument("--auto-subdir", action="store_true", help="Create subfolder data/<dataset_id>_<start>_<end> to avoid overwrites")
     p_ingest.set_defaults(func=cmd_ingest)
 
     # eval (stub)

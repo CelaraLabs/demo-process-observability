@@ -2,12 +2,55 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import base64
 
 from .models import IngestionInfo, RawMessage, SlackMeta, build_slack_thread_id
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _gmail_decode_body(data: Optional[str]) -> str:
+    if not data:
+        return ""
+    try:
+        # Gmail uses URL-safe base64 without padding sometimes
+        missing_padding = (-len(data)) % 4
+        if missing_padding:
+            data += "=" * missing_padding
+        return base64.urlsafe_b64decode(data.encode("utf-8")).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _gmail_collect_text(payload: Dict[str, Any]) -> str:
+    """
+    Collect text content from Gmail message payload.
+    Prefer text/plain parts; fallback to concatenated text of other parts if needed.
+    """
+    texts: List[str] = []
+
+    def walk(part: Dict[str, Any]) -> None:
+        mime = (part.get("mimeType") or "").lower()
+        body = part.get("body") or {}
+        data = body.get("data")
+        if data and ("text/plain" in mime or mime.startswith("text/")):
+            decoded = _gmail_decode_body(data)
+            if decoded:
+                texts.append(decoded)
+        for child in (part.get("parts") or []):
+            if isinstance(child, dict):
+                walk(child)
+
+    if payload:
+        walk(payload)
+        if not texts:
+            # Fallback: try top-level body if present
+            top = _gmail_decode_body((payload.get("body") or {}).get("data"))
+            if top:
+                texts.append(top)
+    return "\n\n".join(t for t in texts if t)
 
 
 def normalize_gmail_message(
@@ -38,7 +81,8 @@ def normalize_gmail_message(
         return None
     sender = headers.get("From")
     subject = headers.get("Subject")
-    text = gmail_obj.get("snippet") or ""
+    # Prefer full decoded body; fallback to snippet
+    text = _gmail_collect_text(gmail_obj.get("payload") or {}) or (gmail_obj.get("snippet") or "")
     rules = [f"mailbox:{account_email}", "time_window"]
     ingestion = IngestionInfo(
         dataset_id=dataset_id,

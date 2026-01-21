@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Any, Dict, Iterable, List, Tuple
 
 from .models import RawMessage
@@ -9,6 +9,23 @@ from .models import RawMessage
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _json_safe(obj: Any) -> Any:
+    """
+    Recursively convert objects to JSON-serializable forms.
+    - date/datetime -> ISO strings
+    - dict/list -> walk recursively
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    return obj
 
 
 def build_manifest(
@@ -32,7 +49,7 @@ def build_manifest(
             "by_source": dict(counts_by_source),
         },
         "counts_by_rule": dict(rules_counter),
-        "config_snapshot": cfg_snapshot,
+        "config_snapshot": _json_safe(cfg_snapshot),
         "created_at": _iso_now(),
     }
 

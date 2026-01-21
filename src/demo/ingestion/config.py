@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -56,14 +56,26 @@ def compute_window(cfg: IngestionConfig) -> Tuple[datetime, datetime, str, str]:
     """
     now = datetime.now(timezone.utc)
     mode = cfg.window_mode
+    def _coerce_date_str(v: Any) -> str:
+        if isinstance(v, datetime):
+            return v.strftime("%Y-%m-%d")
+        if isinstance(v, date):
+            return v.strftime("%Y-%m-%d")
+        if v is None:
+            raise ValueError("Expected a date string (YYYY-MM-DD) but got null")
+        s = str(v)
+        # Basic sanity: expect pattern YYYY-MM-DD
+        if len(s) >= 10:
+            return s[:10]
+        return s
     if mode == "relative":
         end_dt = now
         start_dt = now - timedelta(weeks=cfg.weeks)
     elif mode == "absolute":
-        end_str = cfg.end_date or now.strftime("%Y-%m-%d")
+        end_str = _coerce_date_str(cfg.end_date or now.strftime("%Y-%m-%d"))
         # inclusive end for ingestion selection; convert to end of day
         end_dt = datetime.fromisoformat(end_str + "T23:59:59+00:00")
-        start_str = cfg.start_date
+        start_str = _coerce_date_str(cfg.start_date)
         if not start_str:
             raise ValueError("absolute window requires dataset.window.start_date")
         start_dt = datetime.fromisoformat(start_str + "T00:00:00+00:00")
