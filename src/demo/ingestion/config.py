@@ -30,6 +30,10 @@ class IngestionConfig:
         return self.raw.get("dataset", {}).get("window", {}).get("end_date")
 
     @property
+    def start_date(self) -> Optional[str]:
+        return self.raw.get("dataset", {}).get("window", {}).get("start_date")
+
+    @property
     def credentials_file(self) -> Path:
         return Path(str(self.raw.get("credentials", {}).get("file", "secrets/credentials.json")))
 
@@ -59,7 +63,7 @@ def compute_window(cfg: IngestionConfig) -> Tuple[datetime, datetime, str, str]:
         end_str = cfg.end_date or now.strftime("%Y-%m-%d")
         # inclusive end for ingestion selection; convert to end of day
         end_dt = datetime.fromisoformat(end_str + "T23:59:59+00:00")
-        start_str = str(cfg.raw.get("dataset", {}).get("window", {}).get("start_date"))
+        start_str = cfg.start_date
         if not start_str:
             raise ValueError("absolute window requires dataset.window.start_date")
         start_dt = datetime.fromisoformat(start_str + "T00:00:00+00:00")

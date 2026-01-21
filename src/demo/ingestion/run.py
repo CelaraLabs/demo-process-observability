@@ -37,6 +37,10 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
     creds = _read_credentials(cfg.credentials_file)
 
     start_dt, end_dt, start_date, end_date = compute_window(cfg)
+    console.print(
+        f"[bold]Ingestion window:[/bold] {start_date} → {end_date}  "
+        f"(dataset_id={cfg.dataset_id})"
+    )
 
     dataset_id = cfg.dataset_id
     raw_items: List[RawMessage] = []
@@ -53,6 +57,7 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
         page_size = int(gmail_conf.get("page_size", 200))
         extra = str(gmail_conf.get("query", {}).get("extra") or "")
         max_per_mailbox = gmail_conf.get("max_per_mailbox")
+        console.print(f"[bold]Gmail:[/bold] {len(gmail_mailboxes)} owner mailbox(es) to scan")
         for mailbox in gmail_mailboxes:
             try:
                 service = make_gmail_service(cfg.credentials_file, mailbox)
@@ -60,6 +65,7 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                 console.print(f"[red]Gmail client init failed for {mailbox}:[/red] {e}")
                 continue
             query = build_gmail_query(start_date, end_date, extra)
+            console.print(f"[cyan]Gmail[/cyan] {mailbox}: query='{query}' page_size={page_size}")
             try:
                 # List messages
                 msg_ids: List[str] = []
@@ -71,13 +77,17 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                         msg_ids.append(item.get("id"))
                         if max_per_mailbox and len(msg_ids) >= int(max_per_mailbox):
                             break
+                    if len(msg_ids) and len(msg_ids) % (page_size * 5) == 0:
+                        console.print(f"[cyan]Gmail[/cyan] {mailbox}: listed {len(msg_ids)} ids so far...")
                     if max_per_mailbox and len(msg_ids) >= int(max_per_mailbox):
                         break
                     next_page = resp.get("nextPageToken")
                     if not next_page:
                         break
+                console.print(f"[cyan]Gmail[/cyan] {mailbox}: total ids={len(msg_ids)}")
                 read_counts["gmail"] += len(msg_ids)
                 # Fetch each message detail
+                fetched = 0
                 for mid in msg_ids:
                     try:
                         msg = service.users().messages().get(userId="me", id=mid, format="full").execute()
@@ -86,8 +96,12 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                             raw_items.append(rm)
                             for tag in rm.ingestion.rules_matched:
                                 rules_counter[tag] += 1
+                        fetched += 1
+                        if fetched % 200 == 0:
+                            console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetched {fetched}/{len(msg_ids)}")
                     except Exception:
                         continue
+                console.print(f"[cyan]Gmail[/cyan] {mailbox}: fetched {fetched}/{len(msg_ids)} (done)")
             except Exception as e:
                 console.print(f"[yellow]Gmail listing failed for {mailbox}:[/yellow] {e}")
 
@@ -112,6 +126,7 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
             # Resolve channels to ingest
             channels: List[Dict[str, Any]] = []
             try:
+                console.print("[bold]Slack:[/bold] discovering channels...")
                 cursor = None
                 while True:
                     resp = client.conversations_list(cursor=cursor, limit=page_size)
@@ -134,18 +149,27 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                 include_set = set(include_channels)
                 channels = [c for c in channels if c.get("id") in include_set or c.get("name") in include_set]
             channels = [c for c in channels if c.get("name") not in exclude_by_name]
+            console.print(f"[cyan]Slack[/cyan]: {len(channels)} channel(s) to scan")
 
             # Fetch messages for each channel
             oldest_epoch = int(start_dt.timestamp())
+            latest_epoch = int(end_dt.timestamp())
             for ch in channels:
                 cid = ch.get("id")
                 cname = ch.get("name")
                 per_channel_counts[cid] = 0
                 try:
+                    console.print(f"[cyan]Slack[/cyan] {cname or cid}: fetching history...")
                     cursor = None
                     pulled = 0
                     while True:
-                        resp = client.conversations_history(channel=cid, oldest=str(oldest_epoch), cursor=cursor, limit=page_size)
+                        resp = client.conversations_history(
+                            channel=cid,
+                            oldest=str(oldest_epoch),
+                            latest=str(latest_epoch),
+                            cursor=cursor,
+                            limit=page_size,
+                        )
                         if not resp.get("ok"):
                             break
                         for msg in resp.get("messages", []) or []:
@@ -158,6 +182,8 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                                     rules_counter[tag] += 1
                             if max_per_channel and pulled >= int(max_per_channel):
                                 break
+                        if pulled and pulled % (page_size * 5) == 0:
+                            console.print(f"[cyan]Slack[/cyan] {cname or cid}: pulled {pulled} so far...")
                         if max_per_channel and pulled >= int(max_per_channel):
                             break
                         cursor = (resp.get("response_metadata") or {}).get("next_cursor")
@@ -165,6 +191,7 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
                             break
                 except Exception as e:
                     console.print(f"[yellow]Slack history failed for {cid} ({cname}):[/yellow] {e}")
+                console.print(f"[cyan]Slack[/cyan] {cname or cid}: total pulled={pulled}")
             read_counts["slack"] = sum(per_channel_counts.values())
 
     # Filters
@@ -174,12 +201,18 @@ def run_ingestion(config_path: Path, out_dir: Path) -> Path:
     kept, drops = apply_filters(raw_items, min_text_len=min_text_len, drop_sender_contains=drop_sender_contains)
     for k, v in drops.items():
         dropped_by_reason[k] = dropped_by_reason.get(k, 0) + v
+    console.print(
+        f"[bold]Filtering:[/bold] raw={len(raw_items)} kept={len(kept)} "
+        f"dropped={sum(drops.values())} reasons={drops or {}}"
+    )
 
     # Dedup + sort
     final_items = dedup_and_sort(kept)
+    console.print(f"[bold]Dedup + sort:[/bold] unique={len(final_items)}")
 
     # Write outputs
     raw_path = out_dir / "raw_messages.jsonl"
+    console.print(f"[bold]Writing outputs[/bold] to {out_dir} ...")
     write_raw_messages(raw_path, final_items)
     manifest = build_manifest(
         dataset_id=dataset_id,

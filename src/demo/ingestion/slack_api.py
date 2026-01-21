@@ -22,12 +22,14 @@ class SlackClient:
         resp.raise_for_status()
         return resp.json()
 
-    def conversations_history(self, channel: str, oldest: Optional[str] = None, cursor: Optional[str] = None, limit: int = 200) -> Dict[str, Any]:
+    def conversations_history(self, channel: str, oldest: Optional[str] = None, latest: Optional[str] = None, cursor: Optional[str] = None, limit: int = 200) -> Dict[str, Any]:
         params: Dict[str, Any] = {"channel": channel, "limit": limit}
         if cursor:
             params["cursor"] = cursor
         if oldest:
             params["oldest"] = oldest
+        if latest:
+            params["latest"] = latest
         resp = requests.get(f"{self.base_url}/conversations.history", headers=self._headers(), params=params, timeout=30)
         resp.raise_for_status()
         # Handle rate limit suggestion
