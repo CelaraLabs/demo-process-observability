@@ -4,8 +4,8 @@ dataset:
     mode: absolute    # relative|absolute
     weeks: 12
     end_date: null
-    dataset.window.start_date: 2025-10-01
-    dataset.window.end_date: 2025-12-31
+    start_date: 2025-10-01
+    end_date: 2025-12-31
 
 credentials:
   file: secrets/credentials.json
