@@ -32,28 +32,35 @@ def _gmail_collect_text(payload: Dict[str, Any]) -> str:
     Collect text content from Gmail message payload.
     Prefer text/plain parts; fallback to concatenated text of other parts if needed.
     """
-    texts: List[str] = []
+    plain_texts: List[str] = []
+    other_texts: List[str] = []
 
     def walk(part: Dict[str, Any]) -> None:
         mime = (part.get("mimeType") or "").lower()
         body = part.get("body") or {}
         data = body.get("data")
-        if data and ("text/plain" in mime or mime.startswith("text/")):
+        if data and (mime.startswith("text/")):
             decoded = _gmail_decode_body(data)
             if decoded:
-                texts.append(decoded)
+                if "text/plain" in mime:
+                    plain_texts.append(decoded)
+                else:
+                    other_texts.append(decoded)
         for child in (part.get("parts") or []):
             if isinstance(child, dict):
                 walk(child)
 
     if payload:
         walk(payload)
-        if not texts:
+        selected = plain_texts if plain_texts else other_texts
+        if not selected:
             # Fallback: try top-level body if present
             top = _gmail_decode_body((payload.get("body") or {}).get("data"))
             if top:
-                texts.append(top)
-    return "\n\n".join(t for t in texts if t)
+                selected = [top]
+    else:
+        selected = []
+    return "\n\n".join(t for t in selected if t)
 
 
 def normalize_gmail_message(
@@ -123,6 +130,16 @@ def normalize_gmail_message(
                 walk_parts(child)
     payload = gmail_obj.get("payload") or {}
     walk_parts(payload)
+    # Deduplicate attachments by (filename, mimeType, size) preserving order
+    seen_keys = set()
+    deduped: List[Dict[str, Any]] = []
+    for att in attachments:
+        key = (att.get("filename"), att.get("mimeType"), att.get("size"))
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(att)
+    attachments = deduped
     has_attachments = len(attachments) > 0
     rules = [f"mailbox:{account_email}", "time_window"]
     ingestion = IngestionInfo(
