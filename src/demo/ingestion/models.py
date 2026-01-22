@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 
 class IngestionInfo(BaseModel):
     dataset_id: str
-    time_window: Dict[str, str]  # {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}
+    time_window: Dict[str, Any]  # contains UTC instants and semantics
+    time_window_local: Optional[Dict[str, Any]] = None
     rules_matched: List[str]
     source_ref: Dict[str, Any]
     ingested_at: str
@@ -24,10 +25,12 @@ class RawMessage(BaseModel):
     id: str
     source: str  # "gmail" | "slack"
     ts: str
+    ts_local: Optional[str] = None
     thread_id: Optional[str] = None
 
     sender: Optional[str] = None
     sender_name: Optional[str] = None
+    sender_email: Optional[str] = None
     recipients: Optional[List[str]] = None
     subject: Optional[str] = None
     text: str

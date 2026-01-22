@@ -21,8 +21,6 @@ An end-to-end demo that establishes a stable run contract and CLI, runs the full
 
 ### Setup
 
-You can use `uv`.
-
 Install `uv` if needed:
 
 ```bash
@@ -47,7 +45,7 @@ Run:
 
 ```bash
 uv sync
-uv run demo ingest --config config/ingestion.yml --out data
+uv run demo ingest --config config/ingestion.yml --out data --auto-subdir
 ```
 
 Outputs (in `--out`, default `data/`):

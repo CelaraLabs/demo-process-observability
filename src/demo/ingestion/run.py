@@ -5,6 +5,7 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, timezone
 
 from rich.console import Console
 
@@ -13,6 +14,7 @@ from .gmail_api import make_gmail_service
 from .manifest import build_manifest, build_stats
 from .models import RawMessage, build_gmail_query
 from .normalize import apply_filters, dedup_and_sort, normalize_gmail_message, normalize_slack_message
+from zoneinfo import ZoneInfo
 from .slack_api import SlackClient
 from .write import write_json_file, write_raw_messages
 
@@ -65,6 +67,15 @@ def run_ingestion(config_path: Path, out_dir: Path, auto_subdir: bool = False) -
     read_counts: Dict[str, int] = {"gmail": 0, "slack": 0}
     dropped_by_reason: Dict[str, int] = {}
     per_channel_counts: Dict[str, int] = {}
+    dataset_timezone = "America/Argentina/Buenos_Aires"
+
+    # Prepare window representations
+    dataset_timezone = "America/Argentina/Buenos_Aires"
+    start_utc_iso = start_dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    end_utc_iso = end_dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    local_tz = ZoneInfo(dataset_timezone)
+    start_local_iso = start_dt.astimezone(local_tz).isoformat()
+    end_local_iso = end_dt.astimezone(local_tz).isoformat()
 
     # Gmail
     gmail_mailboxes: List[str] = []
@@ -113,7 +124,19 @@ def run_ingestion(config_path: Path, out_dir: Path, auto_subdir: bool = False) -
                 for mid in msg_ids:
                     try:
                         msg = service.users().messages().get(userId="me", id=mid, format="full").execute()
-                        rm = normalize_gmail_message(msg, mailbox, dataset_id, start_date, end_date, query)
+                        rm = normalize_gmail_message(
+                            msg,
+                            mailbox,
+                            dataset_id,
+                            start_date,
+                            end_date,
+                            start_utc_iso,
+                            end_utc_iso,
+                            dataset_timezone,
+                            start_local_iso,
+                            end_local_iso,
+                            query,
+                        )
                         if rm:
                             raw_items.append(rm)
                             for tag in rm.ingestion.rules_matched:
@@ -198,7 +221,19 @@ def run_ingestion(config_path: Path, out_dir: Path, auto_subdir: bool = False) -
                         for msg in resp.get("messages", []) or []:
                             per_channel_counts[cid] += 1
                             pulled += 1
-                            rm = normalize_slack_message(msg, cid, cname, dataset_id, start_date, end_date)
+                            rm = normalize_slack_message(
+                                msg,
+                                cid,
+                                cname,
+                                dataset_id,
+                                start_date,
+                                end_date,
+                                start_utc_iso,
+                                end_utc_iso,
+                                dataset_timezone,
+                                start_local_iso,
+                                end_local_iso,
+                            )
                             if rm:
                                 raw_items.append(rm)
                                 for tag in rm.ingestion.rules_matched:
@@ -216,6 +251,33 @@ def run_ingestion(config_path: Path, out_dir: Path, auto_subdir: bool = False) -
                     console.print(f"[yellow]Slack history failed for {cid} ({cname}):[/yellow] {e}")
                 console.print(f"[cyan]Slack[/cyan] {cname or cid}: total pulled={pulled}")
             read_counts["slack"] = sum(per_channel_counts.values())
+
+    # Enforce window post-filter (UTC, start inclusive, end exclusive)
+    def _parse_ts(ts: str) -> Optional[datetime]:
+        try:
+            if ts.endswith("Z"):
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return datetime.fromisoformat(ts)
+        except Exception:
+            return None
+
+    kept_time_window: List[RawMessage] = []
+    out_of_window = 0
+    min_ts_val: Optional[str] = None
+    max_ts_val: Optional[str] = None
+    for rm in raw_items:
+        dt = _parse_ts(rm.ts)
+        if not dt:
+            continue
+        if not (start_dt <= dt < end_dt):
+            out_of_window += 1
+            continue
+        kept_time_window.append(rm)
+        if min_ts_val is None or rm.ts < min_ts_val:
+            min_ts_val = rm.ts
+        if max_ts_val is None or rm.ts > max_ts_val:
+            max_ts_val = rm.ts
+    raw_items = kept_time_window
 
     # Filters
     filters_conf = cfg.raw.get("filters", {})
@@ -246,9 +308,28 @@ def run_ingestion(config_path: Path, out_dir: Path, auto_subdir: bool = False) -
         items=final_items,
         rules_counter=rules_counter,
         cfg_snapshot=cfg.raw,
+        timezone_name=dataset_timezone,
+        start_utc_iso=start_utc_iso,
+        end_utc_iso=end_utc_iso,
+    )
+    # Augment counts with window-level summary
+    manifest["counts"].update(
+        {
+            "fetched_total": len(kept) + out_of_window,
+            "kept_in_window": len(kept),
+            "dropped_out_of_window": out_of_window,
+        }
     )
     write_json_file(out_dir / "ingestion_manifest.json", manifest)
-    stats = build_stats(read_counts=read_counts, kept_items=final_items, dropped_by_reason=dropped_by_reason, per_channel_counts=per_channel_counts)
+    stats = build_stats(
+        read_counts=read_counts,
+        kept_items=final_items,
+        dropped_by_reason=dropped_by_reason,
+        per_channel_counts=per_channel_counts,
+        out_of_window_dropped=out_of_window,
+        min_ts=min_ts_val,
+        max_ts=max_ts_val,
+    )
     write_json_file(out_dir / "ingestion_stats.json", stats)
 
     console.print(

@@ -37,16 +37,21 @@ def build_manifest(
     items: List[RawMessage],
     rules_counter: Counter,
     cfg_snapshot: Dict[str, Any],
+    timezone_name: str,
+    start_utc_iso: str,
+    end_utc_iso: str,
 ) -> Dict[str, Any]:
     counts_by_source = Counter(rm.source for rm in items)
     return {
         "dataset_id": dataset_id,
-        "time_window": {"start": start_date, "end": end_date},
+        "timezone": timezone_name,
+        "time_window": {"start_utc": start_utc_iso, "end_utc": end_utc_iso, "start": start_date, "end": end_date},
         "gmail_mailboxes": gmail_mailboxes,
         "slack_strategy": slack_strategy,
         "counts": {
             "total": len(items),
             "by_source": dict(counts_by_source),
+            # Filled later by caller to include fetched/kept/dropped window counts if desired
         },
         "counts_by_rule": dict(rules_counter),
         "config_snapshot": _json_safe(cfg_snapshot),
@@ -59,6 +64,9 @@ def build_stats(
     kept_items: List[RawMessage],
     dropped_by_reason: Dict[str, int],
     per_channel_counts: Dict[str, int] | None = None,
+    out_of_window_dropped: int = 0,
+    min_ts: str | None = None,
+    max_ts: str | None = None,
 ) -> Dict[str, Any]:
     kept_by_source = Counter(rm.source for rm in kept_items)
     return {
@@ -66,4 +74,7 @@ def build_stats(
         "kept_counts": dict(kept_by_source),
         "dropped_by_reason": dropped_by_reason,
         "per_channel_counts": per_channel_counts or {},
+        "out_of_window_dropped": out_of_window_dropped,
+        "min_ts": min_ts,
+        "max_ts": max_ts,
     }

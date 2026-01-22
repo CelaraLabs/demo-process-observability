@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import base64
+from email.utils import parsedate_to_datetime
+from zoneinfo import ZoneInfo
 
 from .models import IngestionInfo, RawMessage, SlackMeta, build_slack_thread_id
+from .utils_email import clean_gmail_text, parse_recipients, parse_sender
 
 
 def _iso_now() -> str:
@@ -59,6 +62,11 @@ def normalize_gmail_message(
     dataset_id: str,
     start_date: str,
     end_date: str,
+    start_utc_iso: str,
+    end_utc_iso: str,
+    dataset_timezone: str,
+    start_local_iso: str,
+    end_local_iso: str,
     gmail_query: str,
 ) -> Optional[RawMessage]:
     """
@@ -68,41 +76,86 @@ def normalize_gmail_message(
     msg_id = gmail_obj.get("id")
     thread_id = gmail_obj.get("threadId")
     headers = {h.get("name"): h.get("value") for h in (gmail_obj.get("payload", {}).get("headers") or [])}
-    date_header = headers.get("Date") or headers.get("date")
-    ts: Optional[str] = None
+    # Timestamp: prefer internalDate (epoch ms)
+    ts_utc: Optional[str] = None
+    ts_local: Optional[str] = None
     try:
-        if date_header:
-            # naive parsing; for robustness, prefer python-dateutil in real code
-            ts_dt = datetime.strptime(date_header[:25], "%a, %d %b %Y %H:%M:%S")
-            ts = ts_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        internal = gmail_obj.get("internalDate")
+        if internal is not None:
+            ms = int(internal)
+            dt_utc = datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
+        else:
+            date_header = headers.get("Date") or headers.get("date")
+            if not date_header:
+                return None
+            dt = parsedate_to_datetime(date_header)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt_utc = dt.astimezone(timezone.utc)
+        ts_utc = dt_utc.isoformat().replace("+00:00", "Z")
+        # Optional local time for convenience
+        local_tz = ZoneInfo("America/Argentina/Buenos_Aires")
+        ts_local = dt_utc.astimezone(local_tz).isoformat()
     except Exception:
-        ts = None
-    if not ts:
         return None
-    sender = headers.get("From")
+    sender_raw = headers.get("From")
+    sender_name, sender_email = parse_sender(sender_raw)
     subject = headers.get("Subject")
     # Prefer full decoded body; fallback to snippet
-    text = _gmail_collect_text(gmail_obj.get("payload") or {}) or (gmail_obj.get("snippet") or "")
+    raw_text = _gmail_collect_text(gmail_obj.get("payload") or {}) or (gmail_obj.get("snippet") or "")
+    text = clean_gmail_text(raw_text)
+    # Recipients
+    recipients = parse_recipients(headers.get("To"), headers.get("Cc"))
+    # Attachments minimal metadata
+    attachments: List[Dict[str, Any]] = []
+    def walk_parts(part: Dict[str, Any]) -> None:
+        filename = (part.get("filename") or "").strip()
+        if filename:
+            attachments.append(
+                {
+                    "filename": filename,
+                    "mimeType": part.get("mimeType"),
+                    "size": ((part.get("body") or {}).get("size")),
+                }
+            )
+        for child in (part.get("parts") or []):
+            if isinstance(child, dict):
+                walk_parts(child)
+    payload = gmail_obj.get("payload") or {}
+    walk_parts(payload)
+    has_attachments = len(attachments) > 0
     rules = [f"mailbox:{account_email}", "time_window"]
     ingestion = IngestionInfo(
         dataset_id=dataset_id,
-        time_window={"start": start_date, "end": end_date},
+        time_window={
+            "start_utc": start_utc_iso,
+            "end_utc": end_utc_iso,
+            "start_inclusive": True,
+            "end_exclusive": True,
+        },
+        time_window_local={
+            "timezone": dataset_timezone,
+            "start": start_local_iso,
+            "end": end_local_iso,
+        },
         rules_matched=rules,
-        source_ref={"gmail_query": gmail_query},
+        source_ref={"gmail_query": gmail_query, "post_filter": "ts_utc in [start_utc, end_utc)"},
         ingested_at=_iso_now(),
     )
     rm = RawMessage(
         id=f"gmail_{msg_id}",
         source="gmail",
-        ts=ts,
+        ts=ts_utc,
+        ts_local=ts_local,
         thread_id=thread_id,
-        sender=sender,
-        sender_name=None,
-        recipients=None,
+        sender=sender_raw,
+        sender_name=sender_name,
+        sender_email=sender_email,
+        recipients=recipients or None,
         subject=subject,
         text=text,
-        has_attachments=bool(gmail_obj.get("payload", {}).get("parts")),
-        attachments=[],
+        has_attachments=has_attachments,
+        attachments=attachments,
         account_email=account_email,
         slack=None,
         ingestion=ingestion,
@@ -117,6 +170,11 @@ def normalize_slack_message(
     dataset_id: str,
     start_date: str,
     end_date: str,
+    start_utc_iso: str,
+    end_utc_iso: str,
+    dataset_timezone: str,
+    start_local_iso: str,
+    end_local_iso: str,
 ) -> Optional[RawMessage]:
     ts = msg.get("ts")
     if not ts:
@@ -124,7 +182,7 @@ def normalize_slack_message(
     # Slack ts is epoch string; convert to ISO seconds
     try:
         seconds = int(float(ts))
-        ts_iso = datetime.fromtimestamp(seconds, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        ts_iso = datetime.fromtimestamp(seconds, tz=timezone.utc).isoformat().replace("+00:00", "Z")
     except Exception:
         return None
     thread_ts = msg.get("thread_ts")
@@ -136,9 +194,19 @@ def normalize_slack_message(
     thread_id = build_slack_thread_id(channel_id, thread_ts, ts)
     ingestion = IngestionInfo(
         dataset_id=dataset_id,
-        time_window={"start": start_date, "end": end_date},
+        time_window={
+            "start_utc": start_utc_iso,
+            "end_utc": end_utc_iso,
+            "start_inclusive": True,
+            "end_exclusive": True,
+        },
+        time_window_local={
+            "timezone": dataset_timezone,
+            "start": start_local_iso,
+            "end": end_local_iso,
+        },
         rules_matched=rules,
-        source_ref={"slack_channels_scanned": 1},
+        source_ref={"slack_channels_scanned": 1, "post_filter": "ts_utc in [start_utc, end_utc)"},
         ingested_at=_iso_now(),
     )
     slack_meta = SlackMeta(
