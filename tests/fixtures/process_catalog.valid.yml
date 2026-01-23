@@ -1,0 +1,12 @@
+processes:
+  hiring:
+    display_name: "Hiring"
+    owner: "HR"
+    steps: ["intake", "screening", "interviews", "offer", "close"]
+    process_aliases: ["recruiting", "recruitment", "recruiting pipeline"]
+    step_aliases:
+      screening: ["phone screen", "initial screen"]
+      interviews: ["onsite", "technical interview", "interview loop"]
+    health:
+      at_risk_after_days: 7
+      overdue_after_days: 14

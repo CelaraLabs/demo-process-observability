@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "demo-process-observability"
 version = "0.0.0"
-description = "Demo repo for process observability — Stage 0 scaffold with run contract"
+description = "Demo repo for process observability"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = []
+dev = ["pytest>=7.0"]
 
 [project.urls]
 Homepage = "https://example.com"

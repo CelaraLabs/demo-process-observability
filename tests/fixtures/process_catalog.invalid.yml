@@ -1,0 +1,8 @@
+processes:
+  hiring:
+    display_name: "Hiring"
+    owner: "HR"
+    steps: ["screening", "Screening"]  # duplicate after normalization
+    health:
+      at_risk_after_days: 10
+      overdue_after_days: 5  # invalid: overdue < at_risk

@@ -232,6 +232,53 @@ Expected run artifacts per run directory:
 - `instances.json`, `timeline.json`, `run_meta.json` (required)
 - `messages.normalized.jsonl`, `review.json`, `review_template.json`, `eval_report.json` (optional)
 
+### Catalogs and canonicalization (Phase A)
+
+Phase A adds deterministic catalogs and pure canonicalization helpers (no pipeline output changes yet).
+
+Config files:
+- `config/process_catalog.yml`: process keys, display names, steps, aliases, health thresholds
+- `config/clients.yml`: canonical client names and aliases
+- `config/roles.yml`: canonical roles and aliases (must include “Other” and “Unknown”)
+
+Programmatic usage:
+
+```python
+from pathlib import Path
+from demo.catalog.loaders import (
+  load_process_catalog, load_clients_catalog, load_roles_catalog
+)
+from demo.catalog.canonicalize import (
+  canonicalize_process, canonicalize_client, canonicalize_role, match_step
+)
+
+pc = load_process_catalog(Path("config/process_catalog.yml"))
+cc = load_clients_catalog(Path("config/clients.yml"))
+rc = load_roles_catalog(Path("config/roles.yml"))
+
+# Process
+assert canonicalize_process("Recruiting", pc) == "hiring"
+
+# Client
+assert canonicalize_client("Altum.ai", cc) == "Altum"
+
+# Role
+assert canonicalize_role("ML Engineer", rc) == "AI Engineer"
+
+# Step (within a process)
+assert match_step("phone screen", "hiring", pc) == "screening"
+```
+
+Notes:
+- Functions are deterministic and return `None` on ambiguity rather than guessing.
+- Phase A is isolated; pipeline/dashboard integration may come in later phases.
+
+Run tests:
+
+```bash
+uv run pytest -q
+```
+
 ### Merge per-client datasets (one-off tool)
 
 If you have multiple per-client raw JSON files (with overlapping messages) and want a single merged dataset for this demo:

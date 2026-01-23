@@ -1,0 +1,14 @@
+roles:
+  canonical:
+    - "AI Engineer"
+    - "Data Scientist"
+    - "Backend Engineer"
+    - "Product Manager"
+    - "Designer"
+    - "Other"
+    - "Unknown"
+  aliases:
+    "AI Engineer": ["ML Engineer", "Machine Learning Engineer", "GenAI Engineer", "AI Eng"]
+    "Product Manager": ["PM", "Product"]
+    "Backend Engineer": ["Backend Developer", "Backend Eng"]
+

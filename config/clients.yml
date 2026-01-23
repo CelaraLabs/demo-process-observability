@@ -1,0 +1,7 @@
+clients:
+  - name: "Altum"
+    aliases: ["Altum.ai", "ALTUM", "Altum AI"]
+  - name: "Forward Financing"
+    aliases: ["ForwardFinancing", "Forward Financing LLC"]
+  - name: "Ideal Prediction"
+    aliases: ["Ideal", "IdealPrediction"]
