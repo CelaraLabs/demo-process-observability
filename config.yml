@@ -69,3 +69,22 @@ stage3:
     review_filename: review.json
     labels:
       allowed: ["correct", "partial", "incorrect", "unsure"]
+
+pass3:
+  enabled: true
+  prompt_path: src/demo/llm/prompts/pass3_step_normalization.md
+  min_confidence: 0.5
+  temperature: 0
+  max_output_tokens: 500
+  timeout_s: 60
+  max_retries: 3
+  cache:
+    enabled: true
+    dir: cache/pass3
+
+pass4:
+  enabled: true
+  min_confidence: 0.7
+  match_threshold: 0.8
+  create_new_instances: true
+  update_existing: true

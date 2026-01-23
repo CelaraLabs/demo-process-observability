@@ -14,6 +14,8 @@ from .io.load_raw import load_raw_dataset, extract_messages
 from .io.normalize import normalize_messages
 from .pipeline.pass1 import run_pass1
 from .pipeline.pass2 import run_stage3
+from .pipeline.pass3 import run_pass3
+from .pipeline.pass4 import run_pass4, print_reconciliation_report
 from .ingestion.run import run_ingestion
 from .ingestion.config import load_config as load_ingest_config
 from .schemas.messages import NormalizedMessage
@@ -414,6 +416,166 @@ def build_parser() -> argparse.ArgumentParser:
     p_stage3.add_argument("--config", type=str, default="config.yml", help="Path to config.yml")
     p_stage3.add_argument("--run-id", type=str, required=True, help="Run ID to process")
     p_stage3.set_defaults(func=cmd_stage3)
+
+    # pass3 (normalize steps using LLM)
+    def cmd_pass3(args: argparse.Namespace) -> int:
+        config_path = Path(args.config or "config.yml")
+        cfg = _load_config_or_exit(config_path)
+        runs_dir = Path(cfg["io"]["runs_dir"])
+        run_dir = get_run_dir(runs_dir, args.run_id)
+
+        instances_path = run_dir / "instances.json"
+        if not instances_path.exists():
+            console.print(f"[red]Missing instances.json at:[/red] {instances_path}")
+            console.print("[yellow]Run stage3 first to generate instances.json[/yellow]")
+            return 2
+
+        process_def_path = Path(args.process_def or "config/process_definition.yml")
+        if not process_def_path.exists():
+            console.print(f"[red]Missing process definition at:[/red] {process_def_path}")
+            return 2
+
+        output_path = run_dir / "instances.normalized.json"
+
+        try:
+            result = run_pass3(instances_path, process_def_path, output_path, cfg)
+            console.print(
+                f"[bold]Pass3:[/bold] normalized={result.normalized} skipped={result.skipped}"
+            )
+            console.print(f"[bold]By process:[/bold] {result.by_process}")
+            console.print(f"[bold]Output:[/bold] {output_path}")
+            return 0
+        except SystemExit:
+            raise
+        except Exception as e:
+            console.print(f"[red]Pass3 failed:[/red] {e}")
+            return 1
+
+    p_pass3 = sub.add_parser("pass3", help="Run Pass3: normalize instance steps using LLM")
+    p_pass3.add_argument("--config", type=str, default="config.yml", help="Path to config.yml")
+    p_pass3.add_argument("--run-id", type=str, required=True, help="Run ID to process")
+    p_pass3.add_argument("--process-def", type=str, default="config/process_definition.yml", help="Path to process_definition.yml")
+    p_pass3.set_defaults(func=cmd_pass3)
+
+    # pass4 (reconcile with dataset)
+    def cmd_pass4(args: argparse.Namespace) -> int:
+        config_path = Path(args.config or "config.yml")
+        cfg = _load_config_or_exit(config_path)
+        runs_dir = Path(cfg["io"]["runs_dir"])
+        run_dir = get_run_dir(runs_dir, args.run_id)
+
+        normalized_path = run_dir / "instances.normalized.json"
+        if not normalized_path.exists():
+            console.print(f"[red]Missing instances.normalized.json at:[/red] {normalized_path}")
+            console.print("[yellow]Run pass3 first to generate normalized instances[/yellow]")
+            return 2
+
+        dataset_path = Path(args.dataset or "data/celara_sample_data.json")
+        if not dataset_path.exists():
+            console.print(f"[red]Missing dataset at:[/red] {dataset_path}")
+            return 2
+
+        process_def_path = Path(args.process_def or "config/process_definition.yml")
+        if not process_def_path.exists():
+            console.print(f"[red]Missing process definition at:[/red] {process_def_path}")
+            return 2
+
+        # Determine output path
+        if args.output:
+            output_path = Path(args.output)
+        elif args.dry_run:
+            # For dry run, we still need to run but won't actually modify
+            # We'll write to a temp location and just report
+            output_path = run_dir / "celara_sample_data.dry_run.json"
+        else:
+            output_path = dataset_path  # Overwrite original
+
+        try:
+            result = run_pass4(normalized_path, dataset_path, process_def_path, output_path, cfg)
+            print_reconciliation_report(result, dry_run=args.dry_run)
+            if args.dry_run:
+                console.print("[yellow]DRY RUN: No changes were made to the original dataset[/yellow]")
+            return 0
+        except SystemExit:
+            raise
+        except Exception as e:
+            console.print(f"[red]Pass4 failed:[/red] {e}")
+            return 1
+
+    p_pass4 = sub.add_parser("pass4", help="Run Pass4: reconcile normalized instances with dataset")
+    p_pass4.add_argument("--config", type=str, default="config.yml", help="Path to config.yml")
+    p_pass4.add_argument("--run-id", type=str, required=True, help="Run ID to process")
+    p_pass4.add_argument("--dataset", type=str, default="data/celara_sample_data.json", help="Path to dataset to update")
+    p_pass4.add_argument("--output", type=str, help="Output path (default: overwrite dataset)")
+    p_pass4.add_argument("--process-def", type=str, default="config/process_definition.yml", help="Path to process_definition.yml")
+    p_pass4.add_argument("--dry-run", action="store_true", help="Show what would change without modifying files")
+    p_pass4.set_defaults(func=cmd_pass4)
+
+    # reconcile (pass3 + pass4 combined)
+    def cmd_reconcile(args: argparse.Namespace) -> int:
+        config_path = Path(args.config or "config.yml")
+        cfg = _load_config_or_exit(config_path)
+        runs_dir = Path(cfg["io"]["runs_dir"])
+        run_dir = get_run_dir(runs_dir, args.run_id)
+
+        instances_path = run_dir / "instances.json"
+        if not instances_path.exists():
+            console.print(f"[red]Missing instances.json at:[/red] {instances_path}")
+            console.print("[yellow]Run stage3 first to generate instances.json[/yellow]")
+            return 2
+
+        process_def_path = Path(args.process_def or "config/process_definition.yml")
+        if not process_def_path.exists():
+            console.print(f"[red]Missing process definition at:[/red] {process_def_path}")
+            return 2
+
+        dataset_path = Path(args.dataset or "data/celara_sample_data.json")
+        if not dataset_path.exists():
+            console.print(f"[red]Missing dataset at:[/red] {dataset_path}")
+            return 2
+
+        normalized_path = run_dir / "instances.normalized.json"
+
+        # Step 1: Run Pass3
+        console.print("[bold]Step 1: Running Pass3 (step normalization)...[/bold]")
+        try:
+            result3 = run_pass3(instances_path, process_def_path, normalized_path, cfg)
+            console.print(
+                f"[bold]Pass3 complete:[/bold] normalized={result3.normalized} skipped={result3.skipped}"
+            )
+        except Exception as e:
+            console.print(f"[red]Pass3 failed:[/red] {e}")
+            return 1
+
+        # Step 2: Run Pass4
+        console.print("[bold]Step 2: Running Pass4 (dataset reconciliation)...[/bold]")
+
+        # Determine output path
+        if args.output:
+            output_path = Path(args.output)
+        elif args.dry_run:
+            output_path = run_dir / "celara_sample_data.dry_run.json"
+        else:
+            output_path = dataset_path
+
+        try:
+            result4 = run_pass4(normalized_path, dataset_path, process_def_path, output_path, cfg)
+            print_reconciliation_report(result4, dry_run=args.dry_run)
+            if args.dry_run:
+                console.print("[yellow]DRY RUN: No changes were made to the original dataset[/yellow]")
+            return 0
+        except Exception as e:
+            console.print(f"[red]Pass4 failed:[/red] {e}")
+            return 1
+
+    p_reconcile = sub.add_parser("reconcile", help="Run full reconciliation pipeline (Pass3 + Pass4)")
+    p_reconcile.add_argument("--config", type=str, default="config.yml", help="Path to config.yml")
+    p_reconcile.add_argument("--run-id", type=str, required=True, help="Run ID to process")
+    p_reconcile.add_argument("--dataset", type=str, default="data/celara_sample_data.json", help="Path to dataset to update")
+    p_reconcile.add_argument("--output", type=str, help="Output path (default: overwrite dataset)")
+    p_reconcile.add_argument("--process-def", type=str, default="config/process_definition.yml", help="Path to process_definition.yml")
+    p_reconcile.add_argument("--dry-run", action="store_true", help="Show what would change without modifying files")
+    p_reconcile.set_defaults(func=cmd_reconcile)
 
     return parser
 

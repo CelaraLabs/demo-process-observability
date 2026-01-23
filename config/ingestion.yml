@@ -8,7 +8,7 @@ dataset:
     end_date: 2026-01-16
 
 credentials:
-  file: secrets/credentials.json
+  file: config/ingestion.secrets.json
 
 gmail:
   enabled: true
