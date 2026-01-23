@@ -32,4 +32,4 @@ Homepage = "https://example.com"
 demo = "demo.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/demo"]
+packages = ["src/demo", "src/scripts"]

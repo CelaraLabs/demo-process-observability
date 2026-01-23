@@ -132,12 +132,14 @@ def match_step(step_raw: str | None, canonical_process: str | None, process_cata
     candidates: List[str] = []
     for s in spec.steps:
         sn = norm_text(s)
-        if sn in step_n or step_n in sn:
+        # Only match when the full step name appears in the raw text (not the other way around)
+        if sn in step_n:
             candidates.append(s)
     for canon_step, aliases in (spec.step_aliases or {}).items():
         for alias in aliases:
             an = norm_text(alias)
-            if an in step_n or step_n in an:
+            # Only match when the full alias appears in the raw text (not the other way around)
+            if an in step_n:
                 candidates.append(canon_step)
     candidates = _unique(candidates)
     if len(candidates) == 1:

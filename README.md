@@ -284,14 +284,14 @@ uv run pytest -q
 If you have multiple per-client raw JSON files (with overlapping messages) and want a single merged dataset for this demo:
 
 ```bash
-# Using explicit inputs
-uv run python scripts/merge_client_datasets.py \
+# Using explicit inputs (module form)
+uv run python -m scripts.merge_client_datasets \
   --inputs data/test/01_raw_messages_altum.json data/test/01_raw_messages_public_relay.json \
   --output data/test/01_raw_messages_2025_merged.json \
   --dataset-id prod_repo_2025_client_loop
 
 # Or via glob
-uv run python scripts/merge_client_datasets.py \
+uv run python -m scripts.merge_client_datasets \
   --inputs-glob "data/test/01_raw_messages_*.json" \
   --output data/test/01_raw_messages_2025_merged.json \
   --dataset-id prod_repo_2025_client_loop
