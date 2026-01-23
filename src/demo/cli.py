@@ -194,6 +194,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                             **run_meta.get("stats", {}),
                             "instances_by_status": result3.stats.get("instances_by_status"),
                             "mean_instance_confidence": result3.stats.get("mean_instance_confidence"),
+                            "phase_b": result3.stats.get("phase_b"),
                         },
                         "output_files": {
                             **run_meta.get("output_files", {}),
@@ -387,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
                         **run_meta.get("stats", {}),
                         "instances_by_status": result3.stats.get("instances_by_status"),
                         "mean_instance_confidence": result3.stats.get("mean_instance_confidence"),
+                        "phase_b": result3.stats.get("phase_b"),
                     },
                     "output_files": {
                         **run_meta.get("output_files", {}),

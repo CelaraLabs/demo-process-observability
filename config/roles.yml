@@ -8,7 +8,7 @@ roles:
     - "Other"
     - "Unknown"
   aliases:
-    "AI Engineer": ["ML Engineer", "Machine Learning Engineer", "GenAI Engineer", "AI Eng"]
+    "AI Engineer": ["ML Engineer", "Machine Learning Engineer", "GenAI Engineer", "AI Eng", "Sr AI Engineer","SR AI Engineer","Senior AI Engineer","Senior ML Engineer"]
     "Product Manager": ["PM", "Product"]
     "Backend Engineer": ["Backend Developer", "Backend Eng"]
 

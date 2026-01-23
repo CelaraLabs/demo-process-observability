@@ -6,9 +6,9 @@ processes:
     process_aliases: ["recruiting", "recruitment", "recruiting pipeline"]
     step_aliases:
       screening: ["phone screen", "initial screen"]
-      interviews: ["onsite", "technical interview", "interview loop"]
+      interviews: ["onsite", "technical interview", "interview loop","interview scheduling","scheduling interview","schedule interview","candidate response pending","post-interview feedback","interview feedback","feedback","next steps", "awaiting candidate response","awaiting candidate responses","candidate response pending","waiting for candidate","no news from","did not reply", "interview scheduled","scheduled interview","agenda","agendada","invite confirmed","confirmed invite","reprogramar","reschedule"]
       offer: ["compensation negotiation", "salary negotiation", "negotiating compensation"]
-      close: ["offer accepted", "signed"]
+      close: ["offer accepted", "signed", "client decision", "decision","rejection","rejected","not moving forward","won't move forward","no van a avanzar","no avanzan","declined"]
     health:
       at_risk_after_days: 7
       overdue_after_days: 14
@@ -23,6 +23,16 @@ processes:
   delivery:
     display_name: "Project Delivery"
     owner: "PM"
-    steps: ["kickoff", "implementation", "handoff"]
+    steps: ["kickoff", "implementation", "deployment", "handoff"]
     process_aliases: ["project delivery", "delivery"]
+    step_aliases:
+      deployment:
+        - "deploy"
+        - "deployment"
+        - "prod"
+        - "production"
+        - "go live"
+        - "release"
+        - "approval to deploy"
+        - "awaiting approval"
     health: { at_risk_after_days: 14, overdue_after_days: 30 }

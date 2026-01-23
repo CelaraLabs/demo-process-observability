@@ -1,27 +1,33 @@
 clients:
   - name: "Altum"
-    aliases: ["Altum.ai", "ALTUM", "Altum AI"]
+    aliases: ["Altum", "Altum.ai", "ALTUM", "Altum AI", "altum"]
   - name: "Forward Financing"
-    aliases: ["ForwardFinancing", "Forward Financing LLC"]
+    aliases: ["Forward Financing", "ForwardFinancing", "Forward Financing"]
   - name: "Ideal Prediction"
-    aliases: ["Ideal", "IdealPrediction"]
+    aliases: ["Ideal Prediction", "Ideal", "IdealPrediction"]
 - name: "Chromatics"
-    aliases: []
+    aliases: ["Chromatics", "chromatics ai", "Chromatics AI"]
 - name: "AFAB"
-    aliases: []
+    aliases: ["AFAB", "afab"]
 - name: "CARPEDM"
-    aliases: []
+    aliases: ["CARPEDM", "carpedm"]
 - name: "Portillos"
-    aliases: ["Portillo's"]
+    aliases: ["Portillo's", "portillos"]
 - name: "Newton"
     aliases: ["Newton Labs", "newton", "newtons"]
 - name: "QU"
-    aliases: []
+    aliases: ["qu", "Qu", "QU Beyond", "qu beyond", "QU beyond"]
 - name: "CFI"
-    aliases: []
+    aliases: ["CFI", "cfi"]
 - name: "GFW"
-    aliases: []
+    aliases: ["GFW", "gfw"]
 - name: "La Pampa"
-    aliases: []
+    aliases: ["La Pampa", "APE", "ape", "la pampa"]
 - name: "Kerry"
-    aliases: []
+    aliases: ["Kerry", "kerry"]
+- name: "Podifi"
+    aliases: ["Podifi", "podifi"]
+- name: "Celara Labs"
+    aliases: ["Celara Labs", "celara labs", "celara", "Celara"]
+- name: "Public Relay"
+  aliases: ["Public Relay", "PublicRelay", "public relay"]

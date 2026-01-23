@@ -12,6 +12,9 @@ from rich.console import Console
 from ..llm.client import OpenAIClient, LLMClientError
 from ..llm.types import Pass1Event
 from ..utils.json_utils import read_jsonl, write_json
+from .stage3_postprocess import enrich_instances
+from ..catalog.loaders import load_process_catalog, load_clients_catalog, load_roles_catalog
+from datetime import datetime, timezone
 
 console = Console()
 
@@ -348,13 +351,31 @@ def run_stage3(run_dir: Path, cfg: Dict[str, Any]) -> Stage3Result:
         f"mean_conf={stats['mean_instance_confidence']}"
     )
 
+    # Phase B post-processing (deterministic enrichment)
+    try:
+        process_catalog = load_process_catalog(Path("config/process_catalog.yml"))
+    except Exception:
+        process_catalog = None
+    try:
+        clients_catalog = load_clients_catalog(Path("config/clients.yml"))
+    except Exception:
+        clients_catalog = None
+    try:
+        roles_catalog = load_roles_catalog(Path("config/roles.yml"))
+    except Exception:
+        roles_catalog = None
+    now = datetime.now(timezone.utc)
+    enriched_instances, phase_b = enrich_instances(
+        instances, process_catalog, clients_catalog, roles_catalog, now
+    )
+
     # Write outputs
     out_instances = run_dir / output_cfg.get("instances", "instances.json")
     out_timeline = run_dir / output_cfg.get("timeline", "timeline.json")
     out_review = run_dir / output_cfg.get("review_template", "review_template.json")
     out_eval = run_dir / output_cfg.get("eval_report", "eval_report.json")
 
-    write_json(out_instances, {"instances": instances})
+    write_json(out_instances, {"instances": enriched_instances})
     write_json(out_timeline, {"by_instance": by_instance_timeline})
 
     # Review template: one row per instance
@@ -387,4 +408,6 @@ def run_stage3(run_dir: Path, cfg: Dict[str, Any]) -> Stage3Result:
     else:
         write_json(out_eval, {"coverage": {"instances": len(instances)}, "stats": stats})
 
-    return Stage3Result(instances=instances, by_instance_timeline=by_instance_timeline, stats=stats)
+    # attach phase_b summary into stats for upstream run_meta inclusion
+    stats["phase_b"] = phase_b
+    return Stage3Result(instances=enriched_instances, by_instance_timeline=by_instance_timeline, stats=stats)
