@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -73,6 +74,126 @@ def _write_cache(cache_path: Path, raw_output: str, parsed_result: Optional[Dict
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"raw_output": raw_output, "parsed_result": parsed_result}
     cache_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _normalize_company_name(company: str) -> str:
+    """
+    Normalize company names to handle case variations and abbreviations.
+    """
+    if not company:
+        return company
+
+    # Common company name normalizations (case-insensitive mapping)
+    company_mappings = {
+        'newton': 'Newton',
+        'nw': 'Newton',
+        'altum': 'Altum',
+        'celara': 'CelaraLabs',
+        'celaralabs': 'CelaraLabs',
+        'chromatics': 'Chromatics',
+        'chromatics ai': 'Chromatics',
+        'chr': 'Chromatics',
+        'qu': 'QU',
+        'lrn': 'LRN',
+        'podifi': 'Podifi',
+        'public relay': 'Public Relay',
+        'ideal prediction': 'Ideal Prediction',
+        'newton labs': 'Newton Labs',
+    }
+
+    normalized = company.strip()
+    normalized_lower = normalized.lower()
+
+    # Check for exact match in mappings
+    if normalized_lower in company_mappings:
+        return company_mappings[normalized_lower]
+
+    # Return with proper casing
+    return normalized
+
+
+def _normalize_position_name(name: str) -> str:
+    """
+    Normalize position names to standard forms.
+    - Backend / Back-end / BE -> Backend
+    - Frontend / Front-end / FE -> Frontend
+    - Fullstack / Full-stack / Full Stack / FS -> Fullstack
+    """
+    if not name:
+        return name
+
+    normalized = name.strip()
+
+    # Map common variations to standard names
+    position_mappings = {
+        # Backend variations (including Engineer, Developer suffixes)
+        r'\b(back[\s-]?end|BE)(\s+(engineer|developer|dev))?\b': 'Backend',
+        # Frontend variations
+        r'\b(front[\s-]?end|FE)(\s+(engineer|developer|dev|position))?\b': 'Frontend',
+        # Fullstack variations
+        r'\b(full[\s-]?stack|full\s+stack|FS)(\s+(engineer|developer|dev))?\b': 'Fullstack',
+        # AI variations
+        r'\b(AI\s+(engineer|developer)|AI\s+dev)\b': 'AI Engineer',
+        # DevOps variations
+        r'\b(dev[\s-]?ops)(\s+engineer)?\b': 'DevOps',
+        # QA variations (including all suffixes)
+        r'\b(QA|quality\s+assurance)(\s+(automation|engineer|role|new\s+hire|analyst))?\b': 'QA',
+        # Developer without context
+        r'\b^developer$\b': 'Developer',
+    }
+
+    for pattern, replacement in position_mappings.items():
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+
+    return normalized
+
+
+def _remove_duplicate_company_suffix(process_id: str, candidate_client: str) -> str:
+    """
+    Remove duplicate company name from process_id.
+    Example: "Frontend - Altum - Altum" with candidate_client="Altum" -> "Frontend - Altum"
+    """
+    if not process_id or not candidate_client:
+        return process_id
+
+    # Split by common separators
+    parts = re.split(r'\s*[-–—]\s*', process_id)
+
+    # Remove duplicate occurrences of the company name (case-insensitive)
+    seen_company = False
+    cleaned_parts = []
+
+    for part in parts:
+        part_lower = part.strip().lower()
+        company_lower = candidate_client.strip().lower()
+
+        if part_lower == company_lower:
+            if not seen_company:
+                cleaned_parts.append(part.strip())
+                seen_company = True
+            # Skip duplicate company names
+        else:
+            cleaned_parts.append(part.strip())
+
+    return ' - '.join(cleaned_parts)
+
+
+def _normalize_process_id(process_id: str, candidate_client: str) -> str:
+    """
+    Normalize process_id by:
+    1. Standardizing position names
+    2. Removing duplicate company names
+    """
+    if not process_id:
+        return process_id
+
+    # First normalize position names
+    normalized = _normalize_position_name(process_id)
+
+    # Then remove duplicate company names
+    normalized = _remove_duplicate_company_suffix(normalized, candidate_client)
+
+    return normalized
 
 
 def _build_input_payload(instance: Dict[str, Any]) -> Dict[str, Any]:
@@ -187,7 +308,7 @@ def run_pass3(
             cached_result = _try_load_cache(cp)
 
         if cached_result is not None:
-            # Use cached result
+            # Use cached result (will be normalized below)
             normalized_step = cached_result
         else:
             # Build prompt
@@ -249,6 +370,32 @@ def run_pass3(
                 }
                 if cache_enabled:
                     _write_cache(cp, "", normalized_step)
+
+        # Apply post-processing normalization
+        candidate_client = instance.get("candidate_client", "")
+        candidate_role = instance.get("candidate_role", "")
+
+        # Normalize company name in the instance data
+        if candidate_client:
+            normalized_client = _normalize_company_name(candidate_client)
+            if normalized_client != candidate_client:
+                instance["candidate_client"] = normalized_client
+                candidate_client = normalized_client
+
+        # Normalize role/position name in the instance data
+        if candidate_role:
+            normalized_role = _normalize_position_name(candidate_role)
+            # Remove company name from role if present
+            normalized_role = _remove_duplicate_company_suffix(normalized_role, candidate_client)
+            if normalized_role != candidate_role:
+                instance["candidate_role"] = normalized_role
+
+        # Normalize process_id
+        if normalized_step.get("process_id"):
+            original_process_id = normalized_step["process_id"]
+            normalized_process_id = _normalize_process_id(original_process_id, candidate_client)
+            if normalized_process_id != original_process_id:
+                normalized_step["process_id"] = normalized_process_id
 
         # Enrich instance with normalized step
         enriched = {**instance, "normalized_step": normalized_step}

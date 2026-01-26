@@ -1,0 +1,199 @@
+process:
+  - id: recruiting
+    name: "Recruiting"
+    important_terms: ['JD', 'job description', 'requirements', 'role', 'position',
+        'candidate', 'resume', 'interview', 'hire', 'hiring',
+        'MSA', 'agreement', 'contract', 'SOW', 
+        'kickoff', 'kick-off', 'onboarding',
+        'dashboard', 'report', 'status', 'update',
+        'approval', 'approved', 'confirm', 'confirmed']
+    relevant_information: ['client name', 'role title', 'role department', 'role seniority level']
+    phases:
+      - id: onboarding
+        name: talent search onboarding
+        type: single
+        owner: Business Development
+        dependencies: []
+        trigger: [Commercial contact, MSA Inititation]
+        termination: external-kick-off
+        termination-propagation: no
+        followed-by: sourcing, weekly-report
+        sla: 5 days
+        warning: 10 days
+        escalation: 15 days
+        steps:
+          - id: role-details
+            name: Obtain JD & Role details
+            short_name: Role Details
+            sla: 2 days after start
+          - id: msa-signature
+            name: Confirm MSA is signed
+            short_name: MSA Signed
+            blocking: yes
+            sla: 2 days after MSA initiation
+          - id: special-checks
+            name: Confirm special checks and requests
+            short_name: Special Checks
+            validation: [document in drive, email from client confirming special checks or absence of those]
+          - id: internal-kick-off
+            name: Internal kick off and Hand off
+            short_name: Internal Kick Off
+            validation: [email to HR with JD, talent acquisition form complete, email to HR with compensation range]
+            sla: 3 days after msa confirmation
+          - id: external-kick-off
+            name: Kick off between Client and HR
+            short_name: External Kick Off
+            sla: 3 days after internal kick off
+            validation: [meeting executed]
+      - id: sourcing
+        name: Candidate sourcing
+        type: single
+        owner: HR
+        dependencies: onboarding
+        steps:
+          - id: lever
+            name: Lever job position created
+            short_name: Lever
+            sla: 1 day after external kick-off
+            validation: [lever job created, lever job published, lever job link shared via slack to team]
+          - id: referral
+            name: Referral sourcing
+            short_name: Referral
+            sla: 1 day after sourcing started
+            validation: [referal program sent in email to employees, referal sent in slack channel]
+          - id: linkedin
+            name: LinkedIn outreach
+            short_name: LinkedIn
+            sla: 2 days after sourcing started
+            validation: [linkedin job posted, linkedin outreach messages sent, linkedin post link shared via slack to team]
+          - id: external-recruiters
+            name: External recruiters outreach
+            short_name: External Recruiters
+            sla: 3 days after sourcing started
+            validation: [external recruiters contacted, external recruiters briefed, job posting link shared with external recruiters ]
+      - id: candidate-presentation
+        name: Candidate presentation and interview scheduling with client
+        type: recurring
+        dependencies: sourcing
+        termination: candidate-accepted
+        steps:
+          - id: candidate-submission
+            name: Send candidate CV and summary to client
+            short_name: Candidate Submission
+          - id: client-profile-feedback
+            name: Obtain client feedback on submitted candidates
+            short_name: Profile Feedback
+            sla: 3 days after candidate submission
+            warning: 7 days after candidate submission
+            escalation: 10 days after candidate submission
+            validation: [feedback email from client received]
+          - id: interview-scheduling
+            name: Schedule interview between candidate and client
+            short_name: Interview Scheduling
+            sla: 2 days after positive client feedback
+            warning: 5 days after positive client feedback
+            escalation: 7 days after positive client feedback
+            validation: [interview invites sent, interview calendar updated]
+          - id: client-interview-feedback
+            name: Obtain client interview feedback
+            short_name: Interview Feedback
+            sla: 2 days after interview
+            warning: 5 days after interview
+            escalation: 7 days after interview
+            validation: [feedback email from client received]
+
+      - id: weekly-report
+        name: Send weekly report to client
+        short_name: Reporting
+        type: recurring
+        dependencies: onboarding
+        when: every week on friday
+        until: sourcing finished
+        steps:
+          - id: send-report
+            name: Send weekly report to client
+            short_name: Weekly Report
+            sla: every week on friday
+            validation: [email to client with report attached]
+
+      - id: Offer and onboarding
+        name: Offer and Onboarding
+        type: single
+        owner: HR
+        dependencies: sourcing
+        trigger: [Candidate selected]
+        termination: candidate-accepted
+        termination-propagation: yes
+        sla: 7 days
+        warning: 10 days
+        escalation: 14 days
+        steps:
+          - id: offer-letter
+            name: Send offer letter to candidate
+            short_name: Offer letter
+            sla: 2 days after candidate selected
+            validation: [offer letter sent, offer letter signed]
+          - id: background-check
+            name: Complete background check
+            short_name: Background Check
+            sla: 5 days after offer letter signed
+            validation: [background check completed, background check cleared]
+          - id: candidate-accepts-offer
+            name: Candidate accepted and confirmed start date
+            short_name: Candidate Acceptance
+            blocking: yes
+            sla: 2 days after background check cleared
+            dependency: offer-letter
+            validation: [candidate confirmation email received]
+          - id: admin-onboarding-process
+            name: Complete onboarding process with the candidate
+            short_name: Onboarding
+            sla: 3 days after background check cleared
+            validation: [onboarding documents sent, onboarding documents signed, first day scheduled]
+            trigger: [candidate-accepts-offer, background-check]
+          - id: admin-invoicing-setup
+            name: Setup invoicing and payment details
+            short_name: Invoicing Setup
+            sla: 3 days after candidate accepts offer
+            validation: [invoicing details sent to client]
+
+  - id: project-management
+    name: "Project Management"
+    important_terms: ['project', 'plan', 'planning', 'execution', 'monitoring', 'closure',
+        'kickoff', 'kick-off', 'completion', 'deliverable', 'milestone',
+        'status', 'update', 'report', 'dashboard',
+        'approval', 'approved', 'confirm', 'confirmed', 'sprint', 'iteration', 'scrum']
+    relevant_information: ['client name', 'project name', 'project manager', 'start date', 'end date']
+    phases:
+      - id: project-initiation
+        name: Project Initiation
+        type: single
+        owner: Project Manager
+        dependencies: []
+        trigger: [Project Kick-off]
+        termination: project-completion
+        termination-propagation: yes
+        followed-by: project-execution
+        sla: 10 days
+        warning: 15 days
+        escalation: 20 days
+        steps:
+          - id: define-scope
+            name: Define project scope and objectives
+            short_name: Scope Definition
+            sla: 3 days after kick-off
+          - id: contract-signature
+            name: Confirm contract is signed
+            short_name: Contract Signed
+            blocking: yes
+            sla: 2 days after kick-off
+      - id: project-execution
+        name: Project Execution and Monitoring
+        type: recurring
+        termination: project-completion
+        steps:
+          - id: status-report
+            name: Send weekly status report to stakeholders
+            short_name: Status Report
+            sla: every week on monday
+            validation: [email to stakeholders with report attached]
