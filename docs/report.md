@@ -140,7 +140,7 @@ Net effect: if the UI assumes these fields exist, we get the “blank dashboard�
 
 ---
 
-## 5) Pass 3 isn’t necessary (and hurts scalability and signal)
+## 5) Assessment of Pass 3
 
 In our baseline, we already extract and preserve rich signal:
 
@@ -204,112 +204,33 @@ Agents can be useful, but they are not a free win. They increase:
 
 ---
 
-## Tracking multiple candidates for the same process (e.g., same role + same client)
-
-### Why this matters
-
-For hiring, a “process instance” is often not just **(client, role)**. It’s **(client, role, candidate)** — and multiple candidates can be active in parallel for the same role. If we collapse everything into one row per (client, role), we’ll either:
-
-* lose visibility (mix candidate threads together), or
-* show duplicated rows (one per thread) that should be consolidated.
-
-### What’s feasible with our current data (Gmail/Slack)
-
-It’s feasible **in many cases**, but not always, because candidate identity is not guaranteed to be explicit.
-
-#### Strong candidate identity signals (high-confidence)
-
-* Candidate email address present in thread participants or body
-* Candidate full name repeatedly referenced in subject/body
-* Attached resume/CV naming conventions
-* Calendar invite details (if ingested)
-
-When these exist, we can build a stable `candidate_id` deterministically.
-
-#### Weak/ambiguous signals (lower-confidence)
-
-* First name only (“Sebastián”) with no email
-* Multiple people with similar names
-* Threads where candidate is not in the recipients (pure internal coordination)
-* Referral-style notes (“someone I know”) without identifiers
-
-In these cases, we can still track separate candidates, but we should avoid over-merging.
-
-### Observability pipeline approach (recommended baseline)
-
-We can support multi-candidate tracking without building a full workflow store.
-
-**What we add**
-
-* `candidate_identity` fields in the instance:
-
-  * `candidate_name_raw` (optional)
-  * `candidate_email` (optional)
-  * `candidate_id` (stable hash if email exists; else normalized name if confident; else null)
-  * `candidate_confidence`
-
-**How reconciliation works for hiring**
-
-* If `candidate_id` is present:
-
-  * reconcile instances by `(canonical_client, canonical_role, candidate_id)`
-* If `candidate_id` is missing:
-
-  * do **not** merge across threads (avoid false merges)
-  * allow multiple “unknown candidate” rows (or cluster by time window as a *soft* merge only if needed)
-
-**How UI should render**
-
-* Prefer: `Role — Client — Candidate`
-* If candidate unknown: `Role — Client — (candidate unknown)`
-* Allow grouping: show a “stack” of candidates under the same role+client
-
-**Key takeaway:** multi-candidate tracking is feasible now as a baseline, as long as we treat candidate identity extraction conservatively and keep “unknown” as a first-class state.
-
-### Workflow store approach (later / higher effort)
-
-In a workflow store, multi-candidate tracking becomes the default because identity keys are central.
-
-**Requirements**
-
-* A formal `instance_key` for recruiting:
-
-  * `(process_id, client_company, role_title, candidate_id)`
-* Explicit event extraction per candidate
-* Persistent store that preserves candidate history across runs
-* UI support for merge/split (human corrections)
-
-This is feasible, but it requires:
-
-* stronger entity extraction + validation
-* manual correction workflow for ambiguous cases
-
-### What can go wrong (and how we prevent it)
-
-**Failure mode:** Over-merging two different candidates into one instance
-Mitigation:
-
-* only merge when candidate_id is high-confidence (email > full name > first name)
-* keep audit trail: merged_from keys and evidence pointers
-
-**Failure mode:** Under-merging (too many rows)
-Mitigation:
-
-* reconciliation can cluster “unknown candidates” by time window for readability (but not as canonical truth)
-* UI grouping can hide noise without changing truth
-
-### Recommended plan
-
-* **Baseline:** implement candidate identity extraction + conservative reconciliation for hiring now.
-* **Evaluation:** include candidate identity coverage as a key metric:
-
-  * `% hiring instances with candidate_id`
-  * merge precision/recall on a small labeled set
-* **Future:** add UI edit logging to resolve ambiguous candidate identities (merge/split).
+Here’s a **concise summary** you can use in the report or slides:
 
 ---
 
-## 7) How we should continue: two viable paths
+## 7. Tracking multiple candidates per role/client
+
+* For hiring, a process instance is often **(client, role, candidate)**, not just (client, role); collapsing candidates loses visibility or creates noisy duplicates.
+
+* With Gmail/Slack data, multi-candidate tracking is **feasible in many cases** using strong signals (email, full name, CVs), but ambiguous cases exist and must be handled conservatively.
+
+* **Observability baseline (recommended now):**
+
+  * Extract candidate identity when confidence is high.
+  * Reconcile by `(client, role, candidate_id)` when available.
+  * Treat “unknown candidate” as a first-class state (do not over-merge).
+  * Let the UI group candidates under the same role/client.
+
+* **Workflow store (later, higher effort):**
+
+  * Requires explicit candidate-level events, persistent identity keys, and UI merge/split corrections.
+  * Feasible, but needs stronger extraction and human-in-the-loop support.
+
+Multi-candidate tracking can be supported now in an observability pipeline with conservative identity resolution, while full canonical handling belongs in a future workflow-store design.
+
+---
+
+## 8) How we should continue: two viable paths
 
 ### Path A: Double down on Observability (recommended baseline)
 
@@ -356,7 +277,7 @@ What you get:
 
 ---
 
-## 8) Decision gates and measurable criteria
+## 9) Decision gates and measurable criteria
 
 To keep debates productive, we should evaluate proposals on metrics:
 
