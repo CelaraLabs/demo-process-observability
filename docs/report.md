@@ -19,7 +19,7 @@ The recommendation is to run **two tracks**:
 
 ---
 
-## 1) Why the current approach cannot produce the results we want (today)
+## 1) Feasibility of matching the expected UI today
 
 The “workflow store” output (`celara_sample_dataset.json`) expects fields that are not directly observable from raw Slack/Gmail without heavier extraction and persistence logic:
 
@@ -178,7 +178,7 @@ In our baseline, we already extract and preserve rich signal:
 
 ---
 
-## 6) Usefulness of agents at this stage
+## 6) Adding agents
 
 Agents can be useful, but they are not a free win. They increase:
 
@@ -201,10 +201,6 @@ Agents can be useful, but they are not a free win. They increase:
 * When the baseline pipeline can already produce a useful dashboard deterministically
 
 **Recommended stance:** agents belong in the experimental track, gated by evaluation against baseline.
-
----
-
-Here’s a **concise summary** you can use in the report or slides:
 
 ---
 
