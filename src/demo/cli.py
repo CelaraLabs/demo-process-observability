@@ -14,6 +14,7 @@ from .io.load_raw import load_raw_dataset, extract_messages
 from .io.normalize import normalize_messages
 from .pipeline.pass1 import run_pass1
 from .pipeline.pass2 import run_stage3
+from .pipeline.reconciliation import run_reconciliation
 from .ingestion.run import run_ingestion
 from .ingestion.config import load_config as load_ingest_config
 from .schemas.messages import NormalizedMessage
@@ -215,6 +216,34 @@ def cmd_run(args: argparse.Namespace) -> int:
                 console.print(f"[red]Stage 3 failed:[/red] {e}")
                 return 1
 
+        # Reconciliation (required)
+        try:
+            console.print("[bold]Starting reconciliation...[/bold]")
+            reconciliation_result = run_reconciliation(run_dir, cfg)
+            # Update run_meta
+            run_meta.update(
+                {
+                    "reconciliation": {
+                        "counts": {
+                            "workflows_written": reconciliation_result.workflows_written,
+                            "match_counts": reconciliation_result.match_counts,
+                        },
+                        "coverage": reconciliation_result.coverage_report,
+                        "output_files": {
+                            **reconciliation_result.output_files,
+                        },
+                    }
+                }
+            )
+            run_meta["output_files"] = {
+                **run_meta.get("output_files", {}),
+                **reconciliation_result.output_files,
+            }
+            write_json(meta_path, run_meta)
+        except Exception as e:
+            console.print(f"[red]Reconciliation failed:[/red] {e}")
+            return 1
+
         return 0
     except SystemExit:
         raise
@@ -405,6 +434,27 @@ def build_parser() -> argparse.ArgumentParser:
                 f"[bold]Stage 3:[/bold] instances={len(result3.instances)} "
                 f"mean_conf={result3.stats.get('mean_instance_confidence')}"
             )
+            console.print("[bold]Starting reconciliation...[/bold]")
+            reconciliation_result = run_reconciliation(run_dir, cfg)
+            run_meta.update(
+                {
+                    "reconciliation": {
+                        "counts": {
+                            "workflows_written": reconciliation_result.workflows_written,
+                            "match_counts": reconciliation_result.match_counts,
+                        },
+                        "coverage": reconciliation_result.coverage_report,
+                        "output_files": {
+                            **reconciliation_result.output_files,
+                        },
+                    }
+                }
+            )
+            run_meta["output_files"] = {
+                **run_meta.get("output_files", {}),
+                **reconciliation_result.output_files,
+            }
+            write_json(meta_path, run_meta)
             return 0
         except SystemExit:
             raise

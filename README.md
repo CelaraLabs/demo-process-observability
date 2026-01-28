@@ -111,6 +111,13 @@ This creates (per run):
 - `runs/<run_id>/review_template.json`
 - `runs/<run_id>/eval_report.json`
 - `runs/<run_id>/run_meta.json` (with `stage: 3`, counts, and stats)
+- `runs/<run_id>/workflow_store.snapshot.json`
+- `runs/<run_id>/coverage_report.json`
+- `runs/<run_id>/reconciliation_report.json`
+- `runs/<run_id>/mapping_drift_report.json`
+
+Persistent output:
+- `data/workflow_store.json`
 
 Rerun Stage 2 only (helpful when iterating on prompts/types) for an existing run:
 
@@ -123,6 +130,24 @@ Rerun Stage 3 only (clustering + state inference):
 ```bash
 uv run demo stage3 --run-id <run_id>
 ```
+
+### Reconciliation (post-Stage 3)
+
+Reconciliation runs automatically after Stage 3 and writes a persistent, UI-facing workflow store. It performs hiring-only reconciliation by default, infers steps/phases from the workflow definition, and emits coverage/reconciliation/drift reports.
+
+Inputs:
+- `runs/<run_id>/instances.json`
+- `runs/<run_id>/timeline.json` (optional; used for evidence fallback)
+- `config/workflow_definition.yaml` (or per-run copy)
+
+Outputs:
+- `data/workflow_store.json` (persistent, cross-run)
+- `runs/<run_id>/workflow_store.snapshot.json`
+- `runs/<run_id>/coverage_report.json`
+- `runs/<run_id>/reconciliation_report.json`
+- `runs/<run_id>/mapping_drift_report.json`
+
+Summary metadata is written to `runs/<run_id>/run_meta.json` under `reconciliation`.
 
 ### Config
 
@@ -192,6 +217,30 @@ stage3:
     review_filename: review.json
     labels:
       allowed: ["correct", "partial", "incorrect", "unsure"]
+reconciliation:
+  enabled: true
+  store:
+    persistent_path: data/workflow_store.json
+    snapshot_name: workflow_store.snapshot.json
+  scope:
+    hiring_only: true
+    hiring_process_keys: ["recruiting", "hiring"]
+  reconcile:
+    match:
+      method: key_then_fuzzy
+      exact_key_fields: ["canonical_client", "canonical_role", "canonical_process"]
+      fuzzy_threshold: 0.88
+    evidence:
+      max_ids_per_instance: 200
+      timeline_fallback_max: 30
+  inference:
+    positional:
+      enabled: true
+      completed_label: completed_inferred
+  reports:
+    coverage_name: coverage_report.json
+    reconciliation_name: reconciliation_report.json
+    drift_name: mapping_drift_report.json
 ```
 
 ### Environment variables
