@@ -1,0 +1,392 @@
+schema_version: "1.0"
+
+processes:
+  - id: recruiting
+    name: "Recruiting"
+    retrieval_terms:
+      - "JD"
+      - "job description"
+      - "requirements"
+      - "role"
+      - "position"
+      - "candidate"
+      - "resume"
+      - "interview"
+      - "hire"
+      - "hiring"
+      - "MSA"
+      - "agreement"
+      - "contract"
+      - "SOW"
+      - "kickoff"
+      - "kick-off"
+      - "onboarding"
+      - "dashboard"
+      - "report"
+      - "status"
+      - "update"
+      - "approval"
+      - "approved"
+      - "confirm"
+      - "confirmed"
+    relevant_information:
+      - "client_name"
+      - "role_title"
+      - "role_department"
+      - "role_seniority_level"
+
+    phases:
+      - id: onboarding
+        name: "Talent search onboarding"
+        phase_type: "single"  # single|recurring
+        owner_role: "business-development"
+        dependencies: []
+        triggers:
+          - "commercial_contact"
+          - "msa_initiation"
+        termination_step_id: "external-kickoff"
+        termination_propagates: false
+        followed_by:
+          - "sourcing"
+          - "weekly-report"
+        sla:
+          target: { value: 5, unit: "days", anchor: "phase_start" }
+          warning: { value: 10, unit: "days", anchor: "phase_start" }
+          escalation: { value: 15, unit: "days", anchor: "phase_start" }
+
+        steps:
+          - id: role-details
+            name: "Obtain JD & role details"
+            short_name: "Role Details"
+            blocking: false
+            sla:
+              target: { value: 2, unit: "days", anchor: "phase_start" }
+            validation: []
+
+          - id: msa-signature
+            name: "Confirm MSA is signed"
+            short_name: "MSA Signed"
+            blocking: true
+            sla:
+              target: { value: 2, unit: "days", anchor: "msa_initiation" }
+            validation: []
+
+          - id: special-checks
+            name: "Confirm special checks and requests"
+            short_name: "Special Checks"
+            blocking: false
+            sla: null
+            validation:
+              - "document_in_drive"
+              - "client_email_confirming_special_checks_or_none"
+
+          - id: internal-kickoff
+            name: "Internal kickoff and handoff"
+            short_name: "Internal Kickoff"
+            blocking: false
+            sla:
+              target: { value: 3, unit: "days", anchor: "msa_signature_confirmed" }
+            validation:
+              - "email_to_hr_with_jd"
+              - "talent_acquisition_form_completed"
+              - "email_to_hr_with_compensation_range"
+
+          - id: external-kickoff
+            name: "Kickoff between client and HR"
+            short_name: "External Kickoff"
+            blocking: false
+            sla:
+              target: { value: 3, unit: "days", anchor: "internal_kickoff_completed" }
+            validation:
+              - "meeting_executed"
+
+      - id: sourcing
+        name: "Candidate sourcing"
+        phase_type: "single"
+        owner_role: "hr"
+        dependencies: ["onboarding"]
+        triggers: []
+        termination_step_id: null
+        termination_propagates: false
+        followed_by: ["candidate-presentation"]
+        sla: null
+
+        steps:
+          - id: lever
+            name: "Create Lever job position"
+            short_name: "Lever"
+            blocking: false
+            sla:
+              target: { value: 1, unit: "days", anchor: "external_kickoff_completed" }
+            validation:
+              - "lever_job_created"
+              - "lever_job_published"
+              - "lever_job_link_shared"
+
+          - id: referral
+            name: "Referral sourcing"
+            short_name: "Referral"
+            blocking: false
+            sla:
+              target: { value: 1, unit: "days", anchor: "phase_start" }
+            validation:
+              - "referral_program_email_sent"
+              - "referral_posted_in_slack"
+
+          - id: linkedin
+            name: "LinkedIn outreach"
+            short_name: "LinkedIn"
+            blocking: false
+            sla:
+              target: { value: 2, unit: "days", anchor: "phase_start" }
+            validation:
+              - "linkedin_job_posted"
+              - "linkedin_outreach_sent"
+              - "linkedin_post_link_shared"
+
+          - id: external-recruiters
+            name: "External recruiters outreach"
+            short_name: "External Recruiters"
+            blocking: false
+            sla:
+              target: { value: 3, unit: "days", anchor: "phase_start" }
+            validation:
+              - "external_recruiters_contacted"
+              - "external_recruiters_briefed"
+              - "job_posting_link_shared_with_external_recruiters"
+
+      - id: candidate-presentation
+        name: "Candidate presentation & interview scheduling with client"
+        phase_type: "recurring"
+        owner_role: "hr"
+        dependencies: ["sourcing"]
+        triggers: []
+        termination_step_id: "candidate-accepted"  # note: step id referenced below in offer phase
+        termination_propagates: false
+        followed_by: ["offer-onboarding"]
+        sla: null
+
+        steps:
+          - id: candidate-submission
+            name: "Send candidate CV and summary to client"
+            short_name: "Candidate Submission"
+            blocking: false
+            sla: null
+            validation: []
+
+          - id: client-profile-feedback
+            name: "Obtain client feedback on submitted candidates"
+            short_name: "Profile Feedback"
+            blocking: false
+            sla:
+              target: { value: 3, unit: "days", anchor: "candidate_submission_sent" }
+              warning: { value: 7, unit: "days", anchor: "candidate_submission_sent" }
+              escalation: { value: 10, unit: "days", anchor: "candidate_submission_sent" }
+            validation:
+              - "client_feedback_email_received"
+
+          - id: interview-scheduling
+            name: "Schedule interview between candidate and client"
+            short_name: "Interview Scheduling"
+            blocking: false
+            sla:
+              target: { value: 2, unit: "days", anchor: "positive_client_feedback" }
+              warning: { value: 5, unit: "days", anchor: "positive_client_feedback" }
+              escalation: { value: 7, unit: "days", anchor: "positive_client_feedback" }
+            validation:
+              - "interview_invites_sent"
+              - "interview_calendar_updated"
+
+          - id: client-interview-feedback
+            name: "Obtain client interview feedback"
+            short_name: "Interview Feedback"
+            blocking: false
+            sla:
+              target: { value: 2, unit: "days", anchor: "interview_completed" }
+              warning: { value: 5, unit: "days", anchor: "interview_completed" }
+              escalation: { value: 7, unit: "days", anchor: "interview_completed" }
+            validation:
+              - "client_feedback_email_received"
+
+      - id: weekly-report
+        name: "Send weekly report to client"
+        phase_type: "recurring"
+        owner_role: "hr"
+        dependencies: ["onboarding"]
+        schedule:
+          rrule: "FREQ=WEEKLY;BYDAY=FR"
+          timezone: "America/Argentina/Buenos_Aires"
+          until_condition: "sourcing_completed"
+        triggers: []
+        termination_step_id: null
+        termination_propagates: false
+        followed_by: []
+        sla: null
+
+        steps:
+          - id: send-report
+            name: "Send weekly report to client"
+            short_name: "Weekly Report"
+            blocking: false
+            sla:
+              target: { value: 0, unit: "days", anchor: "scheduled_occurrence" }
+            validation:
+              - "email_to_client_with_report_attached"
+
+      - id: offer-onboarding
+        name: "Offer & onboarding"
+        phase_type: "single"
+        owner_role: "hr"
+        dependencies: ["candidate-presentation"]
+        triggers:
+          - "candidate_selected"
+        termination_step_id: "candidate-accepts-offer"
+        termination_propagates: true
+        followed_by: []
+        sla:
+          target: { value: 7, unit: "days", anchor: "phase_start" }
+          warning: { value: 10, unit: "days", anchor: "phase_start" }
+          escalation: { value: 14, unit: "days", anchor: "phase_start" }
+
+        steps:
+          - id: offer-letter
+            name: "Send offer letter to candidate"
+            short_name: "Offer Letter"
+            blocking: false
+            sla:
+              target: { value: 2, unit: "days", anchor: "candidate_selected" }
+            validation:
+              - "offer_letter_sent"
+              - "offer_letter_signed"
+
+          - id: background-check
+            name: "Complete background check"
+            short_name: "Background Check"
+            blocking: false
+            sla:
+              target: { value: 5, unit: "days", anchor: "offer_letter_signed" }
+            validation:
+              - "background_check_completed"
+              - "background_check_cleared"
+
+          - id: candidate-accepts-offer
+            name: "Candidate accepted and confirmed start date"
+            short_name: "Candidate Acceptance"
+            blocking: true
+            dependencies: ["offer-letter"]
+            sla:
+              target: { value: 2, unit: "days", anchor: "background_check_cleared" }
+            validation:
+              - "candidate_confirmation_email_received"
+
+          - id: admin-onboarding-process
+            name: "Complete onboarding process with the candidate"
+            short_name: "Onboarding"
+            blocking: false
+            triggers:
+              - "candidate-accepts-offer"
+              - "background-check"
+            sla:
+              target: { value: 3, unit: "days", anchor: "background_check_cleared" }
+            validation:
+              - "onboarding_documents_sent"
+              - "onboarding_documents_signed"
+              - "first_day_scheduled"
+
+          - id: admin-invoicing-setup
+            name: "Set up invoicing and payment details"
+            short_name: "Invoicing Setup"
+            blocking: false
+            sla:
+              target: { value: 3, unit: "days", anchor: "candidate_accepts_offer" }
+            validation:
+              - "invoicing_details_sent_to_client"
+
+  - id: project-management
+    name: "Project Management"
+    retrieval_terms:
+      - "project"
+      - "plan"
+      - "planning"
+      - "execution"
+      - "monitoring"
+      - "closure"
+      - "kickoff"
+      - "kick-off"
+      - "completion"
+      - "deliverable"
+      - "milestone"
+      - "status"
+      - "update"
+      - "report"
+      - "dashboard"
+      - "approval"
+      - "approved"
+      - "confirm"
+      - "confirmed"
+      - "sprint"
+      - "iteration"
+      - "scrum"
+    relevant_information:
+      - "client_name"
+      - "project_name"
+      - "project_manager"
+      - "start_date"
+      - "end_date"
+
+    phases:
+      - id: project-initiation
+        name: "Project initiation"
+        phase_type: "single"
+        owner_role: "project-manager"
+        dependencies: []
+        triggers:
+          - "project_kickoff"
+        termination_step_id: "project-completion"
+        termination_propagates: true
+        followed_by: ["project-execution"]
+        sla:
+          target: { value: 10, unit: "days", anchor: "phase_start" }
+          warning: { value: 15, unit: "days", anchor: "phase_start" }
+          escalation: { value: 20, unit: "days", anchor: "phase_start" }
+
+        steps:
+          - id: define-scope
+            name: "Define project scope and objectives"
+            short_name: "Scope Definition"
+            blocking: false
+            sla:
+              target: { value: 3, unit: "days", anchor: "project_kickoff" }
+            validation: []
+
+          - id: contract-signature
+            name: "Confirm contract is signed"
+            short_name: "Contract Signed"
+            blocking: true
+            sla:
+              target: { value: 2, unit: "days", anchor: "project_kickoff" }
+            validation: []
+
+      - id: project-execution
+        name: "Project execution & monitoring"
+        phase_type: "recurring"
+        owner_role: "project-manager"
+        dependencies: ["project-initiation"]
+        triggers: []
+        termination_step_id: "project-completion"
+        termination_propagates: false
+        followed_by: []
+        schedule:
+          rrule: "FREQ=WEEKLY;BYDAY=MO"
+          timezone: "America/Argentina/Buenos_Aires"
+        sla: null
+
+        steps:
+          - id: status-report
+            name: "Send weekly status report to stakeholders"
+            short_name: "Status Report"
+            blocking: false
+            sla:
+              target: { value: 0, unit: "days", anchor: "scheduled_occurrence" }
+            validation:
+              - "email_to_stakeholders_with_report_attached"
