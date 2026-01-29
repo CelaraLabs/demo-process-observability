@@ -30,7 +30,6 @@ def _render_kpis(coverage: Dict[str, Any]) -> None:
     global_cov = coverage.get("global") or {}
     funnel = coverage.get("recruiting_funnel") or coverage.get("hiring_funnel") or {}
     recruiting = coverage.get("recruiting_reconciliation") or coverage.get("hiring_reconciliation") or {}
-    role_metrics = global_cov.get("role_metrics") or {}
 
     cols = st.columns(4)
     cols[0].metric("Incoming total", str(global_cov.get("incoming_total", "n/a")))
@@ -39,25 +38,36 @@ def _render_kpis(coverage: Dict[str, Any]) -> None:
         "Workflows written",
         str(recruiting.get("recruiting_written_total", recruiting.get("hiring_written_total", "n/a"))),
     )
-    cols[3].metric("Role detected", _metric_value(role_metrics.get("role_detected_pct")))
-
-    cols = st.columns(4)
-    cols[0].metric("Role strict", _metric_value(role_metrics.get("role_canonical_strict_pct")))
-    cols[1].metric("Role Other", _metric_value(role_metrics.get("role_other_pct")))
-    cols[2].metric("Role missing", _metric_value(role_metrics.get("role_missing_pct")))
-    cols[3].metric("Current step", _metric_value(global_cov.get("current_step_pct")))
+    cols[3].metric("Canonical role", _metric_value(global_cov.get("canonical_role_pct")))
 
     cols = st.columns(4)
     cols[0].metric("Canonical process", _metric_value(global_cov.get("canonical_process_pct")))
     cols[1].metric("Canonical client", _metric_value(global_cov.get("canonical_client_pct")))
-    cols[2].metric("Health known", _metric_value(global_cov.get("health_known_pct")))
-    cols[3].metric("Evidence ids", _metric_value(global_cov.get("evidence_ids_pct")))
+    cols[2].metric("Current step", _metric_value(global_cov.get("current_step_pct")))
+    cols[3].metric("Health known", _metric_value(global_cov.get("health_known_pct")))
 
     cols = st.columns(4)
-    cols[0].metric(
-        "Canonical step ID",
-        _metric_value(global_cov.get("canonical_current_step_id_pct")),
-    )
+    cols[0].metric("Evidence ids", _metric_value(global_cov.get("evidence_ids_pct")))
+
+    # Recruiting-scoped coverage (denominator = incoming_recruiting_total)
+    if funnel:
+        cols = st.columns(4)
+        cols[0].metric(
+            "Recruiting: canonical process",
+            _metric_value(funnel.get("canonical_process_pct")),
+        )
+        cols[1].metric(
+            "Recruiting: canonical client",
+            _metric_value(funnel.get("canonical_client_pct")),
+        )
+        cols[2].metric(
+            "Recruiting: canonical role",
+            _metric_value(funnel.get("canonical_role_pct")),
+        )
+        cols[3].metric(
+            "Recruiting: current step",
+            _metric_value(funnel.get("current_step_pct")),
+        )
 
     match_counts = recruiting.get("match_counts") or {}
     if match_counts:

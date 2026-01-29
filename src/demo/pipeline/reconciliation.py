@@ -439,10 +439,11 @@ def reconcile_instances(
     # Coverage and drift counters
     total = len(instances)
     cov_process = cov_client = cov_step = cov_health = cov_evidence = 0
+    recruiting_cov_process = 0
+    recruiting_cov_client = 0
+    recruiting_cov_role = 0
+    recruiting_cov_step = 0
     role_detected = 0
-    role_strict = 0
-    role_other = 0
-    role_missing = 0
     canonical_step_present = 0
     step_match_failures = Counter()
     recruiting_total = 0
@@ -502,12 +503,6 @@ def reconcile_instances(
         canon_role_norm = (canon_role or "").strip()
         if canon_role_norm and canon_role_norm != "Unknown":
             role_detected += 1
-            if canon_role_norm == "Other":
-                role_other += 1
-            else:
-                role_strict += 1
-        else:
-            role_missing += 1
 
         instance_key = inst.get("instance_key")
         evidence_ids = _extract_evidence_ids(inst, timeline_by_instance, max_ids, fallback_max)
@@ -537,6 +532,14 @@ def reconcile_instances(
 
         if canon_process in recruiting_keys:
             recruiting_total += 1
+            if canon_process:
+                recruiting_cov_process += 1
+            if canon_client:
+                recruiting_cov_client += 1
+            if canon_role_norm and canon_role_norm != "Unknown":
+                recruiting_cov_role += 1
+            if current_step_id:
+                recruiting_cov_step += 1
         else:
             if not canon_process:
                 non_recruiting_missing_process += 1
@@ -691,16 +694,11 @@ def reconcile_instances(
             "incoming_total": total,
             "canonical_process_pct": _coverage_pct(cov_process, total),
             "canonical_client_pct": _coverage_pct(cov_client, total),
+            "canonical_role_pct": _coverage_pct(role_detected, total),
             "current_step_pct": _coverage_pct(cov_step, total),
             "health_known_pct": _coverage_pct(cov_health, total),
             "evidence_ids_pct": _coverage_pct(cov_evidence, total),
             "canonical_current_step_id_pct": _coverage_pct(canonical_step_present, total),
-            "role_metrics": {
-                "role_detected_pct": _coverage_pct(role_detected, total),
-                "role_canonical_strict_pct": _coverage_pct(role_strict, total),
-                "role_other_pct": _coverage_pct(role_other, total),
-                "role_missing_pct": _coverage_pct(role_missing, total),
-            },
         },
         "recruiting_funnel": {
             "incoming_recruiting_total": recruiting_total,
@@ -709,6 +707,10 @@ def reconcile_instances(
             "pct_recruiting_among_known_process": _coverage_pct(recruiting_total, cov_process),
             "missing_canonical_process": non_recruiting_missing_process,
             "canonical_process_not_recruiting": non_recruiting_not_recruiting,
+            "canonical_process_pct": _coverage_pct(recruiting_cov_process, recruiting_total),
+            "canonical_client_pct": _coverage_pct(recruiting_cov_client, recruiting_total),
+            "canonical_role_pct": _coverage_pct(recruiting_cov_role, recruiting_total),
+            "current_step_pct": _coverage_pct(recruiting_cov_step, recruiting_total),
         },
         "recruiting_reconciliation": {
             "recruiting_written_total": recruiting_written_total,
