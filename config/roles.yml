@@ -3,12 +3,21 @@ roles:
     - "AI Engineer"
     - "Data Scientist"
     - "Backend Engineer"
+    - "Fullstack Developer"
+    - "Senior QA Analyst"
+    - "Senior QA Engineer"
+    - "Engineering Specialist"
+    - "DevOps Engineer"
+    - "Frontend Developer"
+    - "Python Developer"
     - "Product Manager"
     - "Designer"
     - "Other"
     - "Unknown"
   aliases:
     "AI Engineer": ["ML Engineer", "Machine Learning Engineer", "GenAI Engineer", "AI Eng", "Sr AI Engineer","SR AI Engineer","Senior AI Engineer","Senior ML Engineer"]
-    "Product Manager": ["PM", "Product"]
-    "Backend Engineer": ["Backend Developer", "Backend Eng"]
-
+    "Product Manager": ["PM", "Product", "Prod/Eng leader"]
+    "Backend Engineer": ["Backend Developer", "Backend Eng", ".NET"]
+    "Data Scientist":
+      - "Data Science type role"
+    "Fullstack Developer": ["Fullstack internal"]
